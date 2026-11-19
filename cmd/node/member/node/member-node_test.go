@@ -83,7 +83,7 @@ func newTestMemberNode(t *testing.T) (*MemberNode, *local_store.DB, *database.Au
 	db := testDB(t)
 	authRepo := database.NewAuthRepo(db, "testnet")
 	require.NoError(t, authRepo.Authenticate("test", "test"))
-	_, err := authRepo.SetOwner(domain.Owner{UserId: "owner-1", Username: "owner"})
+	_, err := authRepo.SetOwner(domain.Owner{UserId: "owner-1", Login: "owner"})
 	require.NoError(t, err)
 
 	return newMemberNodeOn(t, db, authRepo), db, authRepo
@@ -502,7 +502,7 @@ func TestStopIsIdempotent(t *testing.T) {
 	_, err = authRepo.SetOwner(domain.Owner{
 		NodeId:   ownNodeId.String(),
 		UserId:   ownNodeId.String(),
-		Username: "test",
+		Login: "test",
 	})
 	require.NoError(t, err)
 
@@ -547,7 +547,7 @@ func newOwnedMemberNode(t *testing.T, ownerId string) (*MemberNode, *local_store
 	db := testDB(t)
 	authRepo := database.NewAuthRepo(db, "testnet")
 	require.NoError(t, authRepo.Authenticate("test", "test"))
-	_, err := authRepo.SetOwner(domain.Owner{UserId: ownerId, Username: ownerId})
+	_, err := authRepo.SetOwner(domain.Owner{UserId: ownerId, Login: ownerId})
 	require.NoError(t, err)
 	return newMemberNodeOn(t, db, authRepo), db
 }
@@ -677,4 +677,10 @@ func TestStopClosesTheRatingBeforeTheGossip(t *testing.T) {
 	m.Stop()
 
 	require.Equal(t, []string{"rating", "pubsub"}, order.closed)
+}
+
+func TestSimpleConnectAfterStopReportsOffline(t *testing.T) {
+	m := &MemberNode{ctx: context.Background(), node: &corenode.WarpNode{}}
+
+	require.ErrorIs(t, m.SimpleConnect(warpnet.WarpAddrInfo{}), warpnet.ErrNodeIsOffline)
 }

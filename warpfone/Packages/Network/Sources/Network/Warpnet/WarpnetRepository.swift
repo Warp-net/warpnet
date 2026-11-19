@@ -201,6 +201,18 @@ actor WarpnetRepository {
     return chain.reversed()
   }
 
+  /// The `actorId` reply to the viewer's tweet `tweetId` written closest to `noticeTime`.
+  func reply(to tweetId: String, by actorId: String, near noticeTime: String, viewerId: String) async -> WarpnetTweet? {
+    guard let parent = try? await tweet(StatusAddress(tweetId: tweetId, userId: viewerId)),
+          let page = try? await repliesPage(of: WarpnetMapper.address(parent).original)
+    else { return nil }
+    let notice = WarpnetFormat.date(fromRFC3339: noticeTime) ?? Date()
+    func distance(_ reply: WarpnetTweet) -> TimeInterval {
+      abs((WarpnetFormat.date(fromRFC3339: reply.createdAt) ?? .distantPast).timeIntervalSince(notice))
+    }
+    return page.tweets.filter { $0.userId == actorId }.min { distance($0) < distance($1) }
+  }
+
   func descendants(of address: StatusAddress, depth: Int = 3) async -> [WarpnetTweet] {
     guard depth > 0, let page = try? await repliesPage(of: address) else { return [] }
     let replies = page.tweets.sorted { ($0.createdAt ?? "") < ($1.createdAt ?? "") }
@@ -370,21 +382,21 @@ actor WarpnetRepository {
 
   // MARK: - Media
 
-  func imageData(userId: String, key: String) async throws -> Data {
-    let cacheKey = "\(userId)/\(key)"
+  func imageData(userId: String, key: String, route: String = ProtocolIds.PUBLIC_GET_IMAGE) async throws -> Data {
+    let cacheKey = "\(route)|\(userId)/\(key)"
     if let cached = images.value(for: cacheKey) {
       return cached
     }
-    let response: GetImageResponse = try await call(ProtocolIds.PUBLIC_GET_IMAGE, GetImageEvent(userId: userId, key: key))
+    let response: GetImageResponse = try await call(route, GetImageEvent(userId: userId, key: key))
     guard let data = Self.decodeFile(response.file) else {
-      throw WarpnetRoutingError.emptyResponse(ProtocolIds.PUBLIC_GET_IMAGE)
+      throw WarpnetRoutingError.emptyResponse(route)
     }
     images.set(data, for: cacheKey, cost: data.count)
     return data
   }
 
-  func videoData(userId: String, key: String) async throws -> Data {
-    let cacheKey = "\(userId)/\(key)"
+  func videoData(userId: String, key: String, route: String = ProtocolIds.PUBLIC_GET_VIDEO) async throws -> Data {
+    let cacheKey = "\(route)|\(userId)/\(key)"
     if let cached = videos.value(for: cacheKey) {
       return cached
     }
@@ -396,9 +408,9 @@ actor WarpnetRepository {
     let client = session.client
     let body = try WarpnetJSON.encode(GetVideoEvent(userId: userId, key: key))
     let fetch = Task {
-      let raw = try await client.requestBytes(ProtocolIds.PUBLIC_GET_VIDEO, body: body)
+      let raw = try await client.requestBytes(route, body: body)
       guard let data = GetVideoResponse.video(from: raw) else {
-        throw WarpnetRoutingError.emptyResponse(ProtocolIds.PUBLIC_GET_VIDEO)
+        throw WarpnetRoutingError.emptyResponse(route)
       }
       return data
     }

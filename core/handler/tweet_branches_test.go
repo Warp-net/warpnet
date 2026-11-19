@@ -12,6 +12,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -99,17 +100,37 @@ func TestStreamEditTweetHandlerBranches(t *testing.T) {
 		repo := stubTweetRepo{getFn: func(u, id string) (domain.Tweet, error) {
 			return domain.Tweet{Id: id, UserId: u, Text: "same"}, nil
 		}}
-		out, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(
+		out, err := StreamEditTweetHandler(repo, stubTimelineRepo{}, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "same"}), nil)
 		require.NoError(t, err)
 		require.Equal(t, "same", domain.Tweet(out.(event.EditTweetResponse)).Text)
+	})
+
+	t.Run("a failing recheck does not fail the edit", func(t *testing.T) {
+		gets := 0
+		repo := stubTweetRepo{getFn: func(u, id string) (domain.Tweet, error) {
+			gets++
+			if gets > 2 {
+				return domain.Tweet{}, errors.New("down")
+			}
+			return domain.Tweet{Id: id, UserId: u, Text: "old"}, nil
+		}}
+		var removed bool
+		timeline := stubTimelineRepo{deleteFn: func(_, _ string) error {
+			removed = true
+			return nil
+		}}
+		_, err := StreamEditTweetHandler(repo, timeline, nil, nil)(
+			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
+		require.NoError(t, err)
+		require.False(t, removed, "only a tweet known to be gone leaves the timeline")
 	})
 
 	t.Run("only the author may edit", func(t *testing.T) {
 		repo := stubTweetRepo{getFn: func(_, id string) (domain.Tweet, error) {
 			return domain.Tweet{Id: id, UserId: "another-user", Text: "old"}, nil
 		}}
-		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(
+		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{}, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
 		require.Error(t, err)
 	})
@@ -119,7 +140,7 @@ func TestStreamEditTweetHandlerBranches(t *testing.T) {
 		repo := stubTweetRepo{getFn: func(_, _ string) (domain.Tweet, error) {
 			return domain.Tweet{}, repoErr
 		}}
-		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(
+		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{}, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
 		require.ErrorIs(t, err, repoErr)
 	})
@@ -131,16 +152,49 @@ func TestStreamEditTweetHandlerBranches(t *testing.T) {
 		timeline := stubTimelineRepo{addFn: func(_ string, _ domain.Tweet) error {
 			return errors.New("timeline down")
 		}}
-		_, err := StreamEditTweetHandler(repo, timeline)(
+		_, err := StreamEditTweetHandler(repo, timeline, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
 		require.NoError(t, err)
+	})
+
+	t.Run("a reply is edited in its thread under the parent", func(t *testing.T) {
+		var looked []string
+		var updatedUnder string
+		repo := &mockTweetsStorer{
+			GetFunc: func(ns, id string) (domain.Tweet, error) {
+				looked = append(looked, ns)
+				if ns != "parent-1" {
+					return domain.Tweet{}, errNotFound
+				}
+				return domain.Tweet{Id: id, UserId: userId, Text: "old"}, nil
+			},
+			UpdateFunc: func(domain.Tweet) error {
+				t.Fatal("a reply is not among its author's tweets")
+				return nil
+			},
+			UpdateReplyFunc: func(parent string, tw domain.Tweet) error {
+				updatedUnder = parent
+				require.Equal(t, "new", tw.Text)
+				return nil
+			},
+		}
+		timeline := stubTimelineRepo{addFn: func(string, domain.Tweet) error {
+			t.Fatal("a reply is not in the timeline")
+			return nil
+		}}
+		_, err := StreamEditTweetHandler(repo, timeline, nil, nil)(marshal(t, event.EditTweetEvent{
+			UserId: userId, TweetId: tweetId, ParentId: "parent-1", RootId: "root-1", Text: "new",
+		}), nil)
+		require.NoError(t, err)
+		require.Equal(t, "parent-1", updatedUnder)
+		require.Equal(t, []string{"parent-1", "parent-1"}, looked)
 	})
 
 	t.Run("nil timeline repo", func(t *testing.T) {
 		repo := stubTweetRepo{getFn: func(u, id string) (domain.Tweet, error) {
 			return domain.Tweet{Id: id, UserId: u, Text: "old"}, nil
 		}}
-		_, err := StreamEditTweetHandler(repo, nil)(
+		_, err := StreamEditTweetHandler(repo, nil, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
 		require.NoError(t, err)
 	})
@@ -159,7 +213,7 @@ func TestStreamEditTweetHandlerBranches(t *testing.T) {
 				return []string{"rt-1", "rt-2"}, "", nil
 			},
 		}
-		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(
+		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{}, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
 		require.NoError(t, err)
 		require.Equal(t, []string{"rt-1", "rt-2"}, cancelled)
@@ -174,7 +228,7 @@ func TestStreamEditTweetHandlerBranches(t *testing.T) {
 				return nil, "", errors.New("index down")
 			},
 		}
-		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(
+		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{}, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
 		require.NoError(t, err)
 	})
@@ -189,7 +243,7 @@ func TestStreamEditTweetHandlerBranches(t *testing.T) {
 				return []string{"rt-1"}, "", nil
 			},
 		}
-		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(
+		_, err := StreamEditTweetHandler(repo, stubTimelineRepo{}, nil, nil)(
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
 		require.NoError(t, err)
 	})
@@ -345,6 +399,23 @@ func TestTweetsRefreshBackground(t *testing.T) {
 		require.Equal(t, []string{"ok"}, cached)
 	})
 
+	t.Run("caches a retweet under the profile owner, not the source author", func(t *testing.T) {
+		var namespaces []string
+		repo := stubTweetRepo{createWithTTLFn: func(ns string, tw domain.Tweet, _ time.Duration) (domain.Tweet, error) {
+			namespaces = append(namespaces, ns)
+			return tw, nil
+		}}
+		by := "other-user"
+		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+			return json.Marshal(event.TweetsResponse{Tweets: []domain.Tweet{
+				{Id: "own", UserId: "other-user"},
+				{Id: "retweeted", UserId: "owner-1", RetweetedBy: &by},
+			}})
+		}}
+		tweetsRefreshBackground(repo, otherNodeRepo, ev, streamer, &stubImageHashes{})
+		require.Equal(t, []string{"other-user", "other-user"}, namespaces)
+	})
+
 	t.Run("keeps the image hashes of the profile owner's sponsored teasers", func(t *testing.T) {
 		price := &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}
 		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
@@ -433,10 +504,25 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		}}
 		out, err := StreamDeleteTweetHandler(
 			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			stubTweetRepo{}, stubTimelineRepo{}, reactions, stubTweetMediaRepo{}, stubStreamer{},
+			stubTweetRepo{}, stubTimelineRepo{}, reactions, stubTweetMediaRepo{}, stubStreamer{}, nil,
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 		require.Equal(t, event.Accepted, out)
+	})
+
+	t.Run("the author's own reaction is taken back from the tweet", func(t *testing.T) {
+		var gotTweet, gotUser string
+		reactions := stubTweetReactionRepo{unreactFn: func(tweet, user string) (uint64, error) {
+			gotTweet, gotUser = tweet, user
+			return 0, nil
+		}}
+		_, err := StreamDeleteTweetHandler(
+			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetRepo{}, stubTimelineRepo{}, reactions, stubTweetMediaRepo{}, stubStreamer{}, nil,
+		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: domain.RetweetPrefix + tweetId}), nil)
+		require.NoError(t, err)
+		require.Equal(t, tweetId, gotTweet)
+		require.Equal(t, owner, gotUser)
 	})
 
 	t.Run("retweet record is unwound", func(t *testing.T) {
@@ -453,7 +539,7 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		}
 		_, err := StreamDeleteTweetHandler(
 			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			repo, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
+			repo, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil,
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 		require.Equal(t, by, unretweeted)
@@ -463,7 +549,7 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		timeline := stubTimelineRepo{deleteFn: func(_, _ string) error { return errors.New("down") }}
 		_, err := StreamDeleteTweetHandler(
 			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			stubTweetRepo{}, timeline, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
+			stubTweetRepo{}, timeline, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil,
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 	})
@@ -474,8 +560,105 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		}}
 		_, err := StreamDeleteTweetHandler(
 			broadcaster, stubAuth{owner: domain.Owner{UserId: owner}},
-			stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
+			stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil,
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 	})
+}
+
+// deleteBeforeRefreshTimeline runs beforeAdd right before the timeline refresh
+// of an edit, the window in which a delete from another device can land.
+type deleteBeforeRefreshTimeline struct {
+	*database.TimelineRepo
+	beforeAdd func()
+}
+
+func (r deleteBeforeRefreshTimeline) AddTweetToTimeline(userId string, tweet domain.Tweet) error {
+	r.beforeAdd()
+	return r.TimelineRepo.AddTweetToTimeline(userId, tweet)
+}
+
+func TestEditRacingDeleteLeavesNoTweetInTimeline(t *testing.T) {
+	const owner = "owner-1"
+	tweetRepo, timelineRepo := newRetweetRepos(t)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "original", CreatedAt: time.Now()})
+	require.NoError(t, err)
+	require.NoError(t, timelineRepo.AddTweetToTimeline(owner, tweet))
+
+	remove := StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, timelineRepo, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil,
+	)
+	timeline := deleteBeforeRefreshTimeline{TimelineRepo: timelineRepo, beforeAdd: func() {
+		_, err := remove(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+		require.NoError(t, err)
+	}}
+
+	_, err = StreamEditTweetHandler(tweetRepo, timeline, nil, nil)(
+		marshal(t, event.EditTweetEvent{UserId: owner, TweetId: tweet.Id, Text: "edited"}), nil,
+	)
+	require.ErrorIs(t, err, database.ErrTweetNotFound)
+	require.Empty(t, timelineIds(t, timelineRepo, owner))
+}
+
+func TestRepeatedDeleteRemovesTimelineLeftover(t *testing.T) {
+	const owner = "owner-1"
+	tweetRepo, timelineRepo := newRetweetRepos(t)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "gone", CreatedAt: time.Now()})
+	require.NoError(t, err)
+	require.NoError(t, timelineRepo.AddTweetToTimeline(owner, tweet))
+	require.NoError(t, tweetRepo.Delete(owner, tweet.Id))
+
+	_, err = StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, timelineRepo, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil,
+	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+	require.ErrorIs(t, err, database.ErrTweetNotFound)
+	require.Empty(t, timelineIds(t, timelineRepo, owner))
+}
+
+func TestDeleteTakesBackOnlyTheAuthorsReaction(t *testing.T) {
+	const owner, fan = "owner-1", "fan-1"
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	t.Cleanup(db.Close)
+	require.NoError(t, database.NewAuthRepo(db, "test").Authenticate("test", "test"))
+
+	tweetRepo, timelineRepo := database.NewTweetRepo(db, nil), database.NewTimelineRepo(db)
+	reactionRepo := database.NewReactionRepo(db, nil)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "liked", CreatedAt: time.Now()})
+	require.NoError(t, err)
+	_, err = reactionRepo.React(tweet.Id, owner, defaultReaction, false)
+	require.NoError(t, err)
+	_, err = reactionRepo.React(tweet.Id, fan, defaultReaction, false)
+	require.NoError(t, err)
+
+	_, err = StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, timelineRepo, reactionRepo, stubTweetMediaRepo{}, stubStreamer{}, nil,
+	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+	require.NoError(t, err)
+
+	reactors, _, err := reactionRepo.Reactors(tweet.Id, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{fan}, reactors)
+}
+
+func TestDeleteOfATweetWithoutReactionsSucceeds(t *testing.T) {
+	const owner = "owner-1"
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	t.Cleanup(db.Close)
+	require.NoError(t, database.NewAuthRepo(db, "test").Authenticate("test", "test"))
+
+	tweetRepo := database.NewTweetRepo(db, nil)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "quiet", CreatedAt: time.Now()})
+	require.NoError(t, err)
+
+	out, err := StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, database.NewTimelineRepo(db), database.NewReactionRepo(db, nil), stubTweetMediaRepo{}, stubStreamer{}, nil,
+	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+	require.NoError(t, err)
+	require.Equal(t, event.Accepted, out)
 }

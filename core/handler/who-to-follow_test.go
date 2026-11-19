@@ -29,7 +29,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 
 	t.Run("filters out self and already followed", func(t *testing.T) {
 		h := StreamGetWhoToFollowHandler(
-			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1", Username: "test"}},
+			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1", Login: "test"}},
 			stubUserFetcher{
 				whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
 					return []domain.User{
@@ -58,7 +58,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 
 	t.Run("filters out Warpnet users federated back by a gateway", func(t *testing.T) {
 		h := StreamGetWhoToFollowHandler(
-			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1", Username: "test"}},
+			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1", Login: "test"}},
 			stubUserFetcher{
 				whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
 					return []domain.User{
@@ -85,7 +85,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	t.Run("keeps repo order", func(t *testing.T) {
 		ulidID := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		h := StreamGetWhoToFollowHandler(
-			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-owner", Username: "test"}},
+			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-owner", Login: "test"}},
 			stubUserFetcher{
 				whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
 					return []domain.User{

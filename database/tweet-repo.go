@@ -29,6 +29,7 @@ package database
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -89,25 +90,27 @@ type TweetStatsStorer interface {
 	Decrement(key ds.Key) error
 }
 
-const viewLockShards = 64
+const counterLockShards = 64
 
 type TweetRepo struct {
 	db      TweetsStorer
 	statsDb TweetStatsStorer
 
-	viewLocks [viewLockShards]sync.Mutex
+	// counterLocks serialize writers of one counter key, which would otherwise
+	// fail each other with a transaction conflict the clients do not retry.
+	counterLocks [counterLockShards]sync.Mutex
 }
 
 func NewTweetRepo(db TweetsStorer, statsDb TweetStatsStorer) *TweetRepo {
 	return &TweetRepo{db: db, statsDb: statsDb}
 }
 
-func (repo *TweetRepo) viewLock(tweetId string) *sync.Mutex {
+func (repo *TweetRepo) counterLock(id string) *sync.Mutex {
 	var h uint32
-	for i := 0; i < len(tweetId); i++ {
-		h = h*31 + uint32(tweetId[i])
+	for i := 0; i < len(id); i++ {
+		h = h*31 + uint32(id[i])
 	}
-	return &repo.viewLocks[h%viewLockShards]
+	return &repo.counterLocks[h%counterLockShards]
 }
 
 // Create adds a new tweet to the database
@@ -157,25 +160,37 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	}
 	tweet.RootId = tweet.Id
 
+	mu := repo.counterLock(userId)
+	mu.Lock()
+	defer mu.Unlock()
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return tweet, err
 	}
 	defer txn.Rollback()
 
+	// Peers' tweets are cached again on every profile refresh: only a tweet
+	// new to this namespace may count.
+	_, _, getErr := get(txn, userId, tweet.Id)
+	if getErr != nil && !errors.Is(getErr, ErrTweetNotFound) {
+		return tweet, getErr
+	}
+	isNew := getErr != nil
+
 	newTweet, err := storeTweet(txn, userId, tweet, duration, false)
 	if err != nil {
 		return newTweet, err
 	}
 
-	countKey := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(tweetsCountSubspace).
-		AddRootID(userId).
-		Build()
-
-	_, err = txn.Increment(countKey)
-	if err != nil {
-		return newTweet, err
+	if isNew {
+		countKey := local.NewPrefixBuilder(TweetsNamespace).
+			AddSubPrefix(tweetsCountSubspace).
+			AddRootID(userId).
+			Build()
+		if _, err = txn.Increment(countKey); err != nil {
+			return newTweet, err
+		}
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -186,6 +201,18 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 }
 
 func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
+	return repo.update(updateTweet.UserId, updateTweet)
+}
+
+// UpdateReply updates a reply, which lives in the thread index under its parent.
+func (repo *TweetRepo) UpdateReply(parentID string, reply domain.Tweet) error {
+	if parentID == "" {
+		return local.DBError("no parent id")
+	}
+	return repo.update(parentID, reply)
+}
+
+func (repo *TweetRepo) update(rootID string, updateTweet domain.Tweet) error {
 	if updateTweet.Id == "" {
 		return local.DBError("no tweet id")
 	}
@@ -200,7 +227,7 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	}
 	defer txn.Rollback()
 
-	existedTweet, expiresAt, err := get(txn, updateTweet.UserId, updateTweet.Id)
+	existedTweet, expiresAt, err := get(txn, rootID, updateTweet.Id)
 	if err != nil {
 		return err
 	}
@@ -219,7 +246,7 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	if ttl <= 0 { //nolint:modernize
 		ttl = 0
 	}
-	_, err = storeTweet(txn, existedTweet.UserId, existedTweet, ttl, true)
+	_, err = storeTweet(txn, rootID, existedTweet, ttl, true)
 	if err != nil {
 		return err
 	}
@@ -416,6 +443,10 @@ func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 
 // Delete removes a tweet by its ID
 func (repo *TweetRepo) Delete(userID, tweetID string) error {
+	mu := repo.counterLock(userID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
@@ -447,6 +478,9 @@ func deleteTweet(txn local.WarpTransactioner, userId, tweetId string) error {
 		AddParentId(tweetId).
 		Build()
 	sortableKeyBytes, err := txn.Get(fixedKey)
+	if local.IsNotFoundError(err) {
+		return ErrTweetNotFound
+	}
 	if err != nil {
 		return err
 	}
@@ -522,6 +556,10 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet, isTransitive bool) (domain.T
 	parentID := *reply.ParentId
 	countKey := tweetsCountKey(parentID)
 
+	mu := repo.counterLock(parentID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return reply, fmt.Errorf("creating transaction: %w", err)
@@ -584,6 +622,10 @@ func (repo *TweetRepo) DeleteReply(parentID, replyID string, isTransitive bool) 
 		return reply, local.DBError("parentID or replyID cannot be empty")
 	}
 
+	mu := repo.counterLock(parentID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return reply, fmt.Errorf("creating transaction: %w", err)
@@ -642,6 +684,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	// puts in tweet.Id). Whether or not the retweeter attached a
 	// comment is a frontend concern — see below for how a comment
 	// turns the retweet record into a quote.
+	tweet.Id = strings.TrimPrefix(tweet.Id, domain.RetweetPrefix)
 	sourceTweetId := tweet.Id
 	retweetCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
@@ -661,10 +704,6 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	}
 	defer txn.Rollback()
 
-	if err := txn.Set(retweetersKey, []byte(*tweet.RetweetedBy)); err != nil {
-		return tweet, err
-	}
-
 	// A quote — a regular tweet that *references* another tweet —
 	// is signalled by a non-empty QuotedTweetId on the wire. Store
 	// it as its own tweet under the retweeter's namespace with a
@@ -675,6 +714,24 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	// source's "X people retweeted me" count. The reader decides
 	// from QuotedTweetId whether to render an embedded preview.
 	isQuote := tweet.QuotedTweetId != nil && *tweet.QuotedTweetId != ""
+	if !isQuote {
+		retweetId := tweet.Id
+		if tweet.UserId == *tweet.RetweetedBy {
+			retweetId = domain.RetweetPrefix + tweet.Id
+		}
+		existing, _, err := get(txn, *tweet.RetweetedBy, retweetId)
+		if err != nil && !errors.Is(err, ErrTweetNotFound) {
+			return tweet, err
+		}
+		if err == nil && existing.RetweetedBy != nil && *existing.RetweetedBy == *tweet.RetweetedBy {
+			return existing, nil // one user retweets a tweet once
+		}
+	}
+
+	if err := txn.Set(retweetersKey, []byte(*tweet.RetweetedBy)); err != nil {
+		return tweet, err
+	}
+
 	switch {
 	case isQuote:
 		tweet.Id = ulid.Make().String()
@@ -731,13 +788,20 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string, isTransitive
 	}
 	defer txn.Rollback()
 
-	tweet, _, err := get(txn, retweetedByUserID, sourceTweetId)
-	if err != nil {
+	// A self-retweet is found by its own record: its source may be deleted.
+	retweetId := domain.RetweetPrefix + sourceTweetId
+	_, _, err = get(txn, retweetedByUserID, retweetId)
+	if err != nil && !errors.Is(err, ErrTweetNotFound) {
 		return err
 	}
-	retweetId := sourceTweetId
-	if tweet.UserId == retweetedByUserID {
-		retweetId = domain.RetweetPrefix + sourceTweetId
+	if err != nil {
+		tweet, _, err := get(txn, retweetedByUserID, sourceTweetId)
+		if err != nil {
+			return err
+		}
+		if tweet.UserId != retweetedByUserID {
+			retweetId = sourceTweetId
+		}
 	}
 
 	if err := txn.Delete(retweetersKey); err != nil {
@@ -858,7 +922,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string, isTransitive bool) (
 		AddParentId(viewerId).
 		Build()
 
-	mu := repo.viewLock(tweetId)
+	mu := repo.counterLock(tweetId)
 	mu.Lock()
 	defer mu.Unlock()
 

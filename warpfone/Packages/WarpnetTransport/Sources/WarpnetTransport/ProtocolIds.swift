@@ -61,6 +61,8 @@ public enum ProtocolIds {
   public static let PUBLIC_POST_TIMELINE = "/public/post/timeline/0.0.0"
   public static let PUBLIC_DELETE_TIMELINE = "/public/delete/timeline/0.0.0"
   public static let PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
+  public static let PUBLIC_POST_REPLY_EDIT = "/public/post/reply/edit/0.0.0"
+  public static let PUBLIC_DELETE_REPLY = "/public/delete/reply/0.0.0"
   public static let PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
   public static let PRIVATE_POST_USER = "/private/post/user/0.0.0"
   public static let PRIVATE_GET_USER_STATUS = "/private/get/user/status/0.0.0"

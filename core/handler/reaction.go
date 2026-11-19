@@ -227,7 +227,7 @@ func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, 
 		// Mirror the reaction path: only the unreactor's own node adjusts the
 		// network-wide (CRDT) counter.
 		num, err := repo.Unreact(tweetId, ev.OwnerId, ev.OwnerId == ownNodeInfo.OwnerId)
-		if err != nil {
+		if err != nil && !errors.Is(err, database.ErrReactionsNotFound) { // nothing to take back is done
 			log.Errorf("unreaction handler failed: %v", err)
 			return nil, err
 		}

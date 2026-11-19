@@ -848,6 +848,9 @@ public struct WarpnetMessage: Decodable, Equatable, Sendable {
   public var text: String
   public var createdAt: String
   public var status: String
+  /// With `videoKey` set, the only entry is the video's still frame.
+  public var imageKeys: [String]
+  public var videoKey: String?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -857,6 +860,8 @@ public struct WarpnetMessage: Decodable, Equatable, Sendable {
     case text
     case createdAt = "created_at"
     case status
+    case imageKeys = "image_keys"
+    case videoKey = "video_key"
   }
 
   public init(from decoder: Decoder) throws {
@@ -868,6 +873,8 @@ public struct WarpnetMessage: Decodable, Equatable, Sendable {
     text = try c.value(.text, "")
     createdAt = try c.value(.createdAt, "")
     status = try c.value(.status, "")
+    imageKeys = try c.value(.imageKeys, [])
+    videoKey = try c.decodeIfPresent(String.self, forKey: .videoKey)
   }
 }
 

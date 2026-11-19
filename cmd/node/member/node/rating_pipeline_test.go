@@ -165,6 +165,11 @@ func (s *ratingStack) servedOf(t *testing.T, from caller, route string, n int) i
 
 const writeRoute = "/public/post/tweet/0.0.0"
 
+// forgeRoute carries the forged calls: the peer is floored after four of
+// them, so a re-rating between calls on writeRoute would spend the floor
+// bucket the test measures.
+const forgeRoute = "/public/post/reply/0.0.0"
+
 var pipelineLimits = ratelimit.Settings{StreamWriteBurst: 40, StreamWritePerMinute: 40}
 
 // What the auth middleware refuses reaches the engine, what the engine
@@ -174,7 +179,7 @@ func TestAForgerIsFlooredAndServedATenth(t *testing.T) {
 	s := newRatingStack(t, testDB(t), mustKey(t), pipelineLimits)
 	forger, honest, stranger := newCaller(t), newCaller(t), newCaller(t)
 
-	s.call(t, forger, writeRoute, stranger.priv, 5) // signed with somebody else's key
+	s.call(t, forger, forgeRoute, stranger.priv, 5) // signed with somebody else's key
 	require.Eventually(t, func() bool { return s.ratings.Tier(forger.id) == rating.TierFloor },
 		5*time.Second, 10*time.Millisecond, "five bad signatures floor the peer")
 	assert.Equal(t, rating.TierTrusted, s.ratings.Tier(honest.id))
@@ -182,17 +187,21 @@ func TestAForgerIsFlooredAndServedATenth(t *testing.T) {
 	assert.Equal(t, 4, s.servedOf(t, forger, writeRoute, 40), "a tenth of a burst of forty")
 	assert.Equal(t, 40, s.servedOf(t, honest, writeRoute, 40), "the whole burst")
 
+	// The records are flushed as the engine rates, so wait for the last count.
+	byDim := map[string][]domain.OffenceCount{}
 	require.Eventually(t, func() bool {
 		recs, err := s.store.List(forger.id.String())
-		return err == nil && len(recs) == 2
+		if err != nil || len(recs) != 2 {
+			return false
+		}
+		clear(byDim)
+		for _, rec := range recs {
+			assert.Equal(t, s.self.String(), rec.ObserverID)
+			byDim[rec.Dimension] = rec.Offences
+		}
+		net := byDim["net"]
+		return len(net) == 2 && net[1].Count == 36
 	}, 5*time.Second, 10*time.Millisecond, "a signed record per axis, in the Badger-backed CRDT")
-	recs, err := s.store.List(forger.id.String())
-	require.NoError(t, err)
-	byDim := map[string][]domain.OffenceCount{}
-	for _, rec := range recs {
-		assert.Equal(t, s.self.String(), rec.ObserverID)
-		byDim[rec.Dimension] = rec.Offences
-	}
 	assert.Equal(t, []domain.OffenceCount{{Kind: "bad_signature", Count: 5}, {Kind: "rate_limit_hit", Count: 36}},
 		byDim["net"], "the 36 writes the limiter turned away are charged as well")
 	assert.Equal(t, []domain.OffenceCount{{Kind: "write_flood", Count: 1}}, byDim["app"])

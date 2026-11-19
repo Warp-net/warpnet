@@ -98,24 +98,9 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 
-		source, err := tweetRepo.Get(retweetEvent.UserId, strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix))
-		if err == nil && source.IsSponsored() {
-			retweetEvent.Price = source.Price
-		}
-		retweetEvent = retweetEvent.Teaser()
-
 		ownNodeInfo := streamer.NodeInfo()
 		ownerId := ownNodeInfo.OwnerId
 		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
-
-		// The network-wide (CRDT) retweet counter is bumped only on the
-		// retweeter's own node, so a retweet stored on both the retweeter's and
-		// the source author's node is counted once.
-		retweet, err := tweetRepo.NewRetweet(retweetEvent, isOwnerRetweeter)
-		if err != nil {
-			log.Errorf("retweet handler failed: %v", err)
-			return nil, err
-		}
 
 		// A quote is a regular tweet authored by the retweeter that
 		// references another tweet through QuotedTweetId / QuotedUserId.
@@ -129,6 +114,33 @@ func StreamNewReTweetHandler(
 			sourceAuthorId = *retweetEvent.QuotedUserId
 		}
 		sourceTweetId := strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix)
+
+		// A reply is stored under its parent, so only a root tweet missing from
+		// the owner's partition is a deleted one. The parent id only identifies
+		// the source: the retweet itself is not a reply.
+		parentId := retweetEvent.ParentId
+		retweetEvent.ParentId = nil
+		isReply := parentId != nil && *parentId != "" && *parentId != sourceTweetId
+		isOwnRootSource := !isQuote && !isReply && retweetEvent.UserId == ownerId
+
+		source, err := tweetRepo.Get(retweetEvent.UserId, sourceTweetId)
+		if isOwnRootSource && errors.Is(err, database.ErrTweetNotFound) {
+			return nil, err
+		}
+		if err == nil && source.IsSponsored() {
+			retweetEvent.Price = source.Price
+		}
+		retweetEvent = retweetEvent.Teaser()
+
+		// The network-wide (CRDT) retweet counter is bumped only on the
+		// retweeter's own node, so a retweet stored on both the retweeter's and
+		// the source author's node is counted once.
+		retweet, err := tweetRepo.NewRetweet(retweetEvent, isOwnerRetweeter)
+		if err != nil {
+			log.Errorf("retweet handler failed: %v", err)
+			return nil, err
+		}
+
 		if isQuote {
 			sourceTweetId = *retweetEvent.QuotedTweetId
 		}
@@ -138,6 +150,21 @@ func StreamNewReTweetHandler(
 			if err = timelineRepo.AddTweetToTimeline(ownerId, retweet); err != nil {
 				log.Infof("fail adding retweet to timeline: %v", err)
 			}
+		}
+
+		// The source may have been deleted from another device meanwhile.
+		var sourceErr error
+		if isOwnerRetweeter && isOwnRootSource {
+			_, sourceErr = tweetRepo.Get(ownerId, sourceTweetId)
+		}
+		if errors.Is(sourceErr, database.ErrTweetNotFound) {
+			if err := tweetRepo.UnRetweet(ownerId, sourceTweetId, true); err != nil && !errors.Is(err, database.ErrTweetNotFound) {
+				log.Errorf("retweet handler: unwinding retweet of a deleted tweet: %v", err)
+			}
+			if err := timelineRepo.DeleteTweetFromTimeline(ownerId, retweet.Id); err != nil {
+				log.Errorf("retweet handler: timeline delete: %v", err)
+			}
+			return nil, sourceErr
 		}
 
 		isOwnTweetRetweet := ownerId == sourceAuthorId // my own tweet retweet
@@ -173,10 +200,12 @@ func StreamNewReTweetHandler(
 			return retweet, nil
 		}
 
+		forwarded := event.NewRetweetEvent(retweet)
+		forwarded.ParentId = parentId // the author's node looks the source up too
 		retweetDataResp, err := streamer.GenericStream(
 			tweetOwner.NodeId,
 			event.PUBLIC_POST_RETWEET,
-			event.NewRetweetEvent(retweet),
+			forwarded,
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
 			return retweet, nil

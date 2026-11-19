@@ -216,6 +216,8 @@ configurations.configureEach {
 dependencies {
     implementation project(":warpnet-transport")
 
+    testImplementation libs.junit
+
     implementation libs.kotlinx.coroutines.android
 
     implementation libs.bundles.androidx

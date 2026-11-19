@@ -62,7 +62,7 @@ func StreamGetWhoToFollowHandler(
 			log.Errorf("get who to follow handler: get user %v", err)
 			profile = domain.User{
 				Id:       owner.UserId,
-				Username: owner.Username,
+				Username: owner.Login,
 				Network:  warpnet.WarpnetName,
 				NodeId:   owner.NodeId,
 			}

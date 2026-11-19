@@ -106,7 +106,8 @@ func (s stubTweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	}
 	return tweet, nil
 }
-func (s stubTweetRepo) Update(tweet domain.Tweet) error { return nil }
+func (s stubTweetRepo) Update(tweet domain.Tweet) error        { return nil }
+func (s stubTweetRepo) UpdateReply(string, domain.Tweet) error { return nil }
 func (s stubTweetRepo) Pin(userId, tweetId string) (domain.Tweet, error) {
 	return domain.Tweet{Id: tweetId, UserId: userId, Pinned: true}, nil
 }
@@ -750,7 +751,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil)
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -758,7 +759,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil)
 		_, err := h(marshal(t, event.DeleteTweetEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -766,7 +767,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil)
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -777,7 +778,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{deleteFn: func(userID, tweetID string) error {
 			return repoErr
-		}}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{})
+		}}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil)
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -789,7 +790,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			route = dest
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil)
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -807,7 +808,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil)
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: "other-1", TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -834,7 +835,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	t.Run("own tweet delete - drops its media", func(t *testing.T) {
 		var deleted []string
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			withMedia(ownTweet), stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{deleted: &deleted}, stubStreamer{})
+			withMedia(ownTweet), stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{deleted: &deleted}, stubStreamer{}, nil)
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 		require.Equal(t, []string{"image:owner-1:poster-key", "video:owner-1:video-key"}, deleted)
@@ -857,7 +858,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				var deleted []string
 				h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-					withMedia(tc.tweet), stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{deleted: &deleted}, stubStreamer{})
+					withMedia(tc.tweet), stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{deleted: &deleted}, stubStreamer{}, nil)
 				_, err := h(marshal(t, tc.ev), nil)
 				require.NoError(t, err)
 				require.Empty(t, deleted)
@@ -1071,6 +1072,7 @@ type mockTweetsStorer struct {
 	DeleteReplyFunc   func(string, string, bool) (domain.Tweet, error)
 	GetRepliesFunc    func(string, *uint64, *string) ([]domain.Tweet, string, error)
 	UpdateFunc        func(domain.Tweet) error
+	UpdateReplyFunc   func(string, domain.Tweet) error
 	AppendEditFunc    func(domain.TweetEdit) (domain.TweetEdit, error)
 	PinFunc           func(string, string) (domain.Tweet, error)
 	UnpinFunc         func(string, string) (domain.Tweet, error)
@@ -1142,6 +1144,13 @@ func (m *mockTweetsStorer) GetReplies(p string, l *uint64, c *string) ([]domain.
 func (m *mockTweetsStorer) Update(t domain.Tweet) error {
 	if m.UpdateFunc != nil {
 		return m.UpdateFunc(t)
+	}
+	return nil
+}
+
+func (m *mockTweetsStorer) UpdateReply(parentID string, t domain.Tweet) error {
+	if m.UpdateReplyFunc != nil {
+		return m.UpdateReplyFunc(parentID, t)
 	}
 	return nil
 }
@@ -1512,7 +1521,7 @@ func TestStreamEditTweetHandler_CornerCases(t *testing.T) {
 			tl := &mockTimeline{}
 			tt.setup(repo, tl)
 
-			handler := StreamEditTweetHandler(repo, tl)
+			handler := StreamEditTweetHandler(repo, tl, nil, nil)
 			_, err := handler(marshal(t, tt.ev), nil)
 
 			if tt.wantErr {
@@ -1691,7 +1700,7 @@ func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
 				},
 			}
 
-			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, stubTweetMediaRepo{}, s)
+			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, stubTweetMediaRepo{}, s, nil)
 			_, err := handler(marshal(t, tt.ev), nil)
 
 			if tt.wantErr != nil {
@@ -1946,7 +1955,7 @@ func TestStreamEditTweetHandler_SponsoredTweetIsFrozen(t *testing.T) {
 	repo := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 		return domain.Tweet{Id: tweetID, UserId: userID, Text: "paid", Price: sponsoredPrice()}, nil
 	}}
-	_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(marshal(t, event.EditTweetEvent{UserId: "owner-1", TweetId: "tweet-1", Text: "cheaper"}), nil)
+	_, err := StreamEditTweetHandler(repo, stubTimelineRepo{}, nil, nil)(marshal(t, event.EditTweetEvent{UserId: "owner-1", TweetId: "tweet-1", Text: "cheaper"}), nil)
 	assert.EqualError(t, err, "edit tweet: a sponsored tweet cannot be edited")
 }
 

@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -82,12 +81,10 @@ func StreamNodesPairingHandler(
 			log.Errorf("pair: keepalive acquire: %v", err)
 		}
 
-		println()
-		fmt.Printf(
-			"\033[1mPAIRED %s\033[0m\n",
-			s.Conn().RemotePeer().String(),
+		log.Infof(
+			"paired device %s:%s",
+			s.Conn().RemotePeer().String(), s.Conn().RemoteMultiaddr().String(),
 		)
-		println()
 
 		nodeAddrs := n.Addrs()
 		addrs := make([]string, 0, len(nodeAddrs))

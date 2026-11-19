@@ -177,6 +177,27 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(status.content.statusesURLs.map(\.absoluteString), ["warpnet://status/01SRC%7C01SRCAUTHOR"])
   }
 
+  func testEditingAReplyNamesItsParent() async throws {
+    let viewer = ScriptedNode.viewerId
+    let reply: [String: Any] = ["parent_id": "01PARENT", "root_id": "01ROOT"]
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PUBLIC_GET_TWEET:
+        return ScriptedNode.json(ScriptedNode.tweet("01REPLY", by: viewer, text: "before", extra: reply))
+      case ProtocolIds.PRIVATE_POST_TWEET_EDIT:
+        return ScriptedNode.json(ScriptedNode.tweet("01REPLY", by: viewer, text: body["text"] as? String ?? "", extra: reply))
+      default:
+        return Self.standardNode(route, body, timeline: [])
+      }
+    }
+    let id = StatusAddress(tweetId: "01REPLY", userId: viewer, rootId: "01ROOT").id
+    _ = try await router.route(Statuses.status(id: id), method: .get)
+    _ = try await router.route(Statuses.editStatus(id: id, json: StatusData(status: "after")), method: .put)
+    let edit = try XCTUnwrap(binding.calls(to: ProtocolIds.PRIVATE_POST_TWEET_EDIT).first)
+    XCTAssertEqual(edit["parent_id"] as? String, "01PARENT")
+    XCTAssertEqual(edit["text"] as? String, "after")
+  }
+
   func testDeletedTweetReadsAsMissing() async throws {
     let (router, _) = await makeRouter { route, body in
       route == ProtocolIds.PUBLIC_GET_TWEET
@@ -367,7 +388,36 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(older.map(\.id), ["03", "02"])
     XCTAssertEqual(older.first?.supportedType, .mention)
     XCTAssertNil(older.first?.status)
-    XCTAssertFalse(binding.calls(to: ProtocolIds.PUBLIC_GET_TWEET).contains { $0["tweet_id"] as? String == "01MINE" })
+  }
+
+  func testReplyNoticesShowTheActorsReply() async throws {
+    let viewer = ScriptedNode.viewerId
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PRIVATE_GET_NOTIFICATIONS:
+        return ScriptedNode.json(["notifications": [
+          ["id": "01", "type": "reply", "actor_id": "01BOB", "tweet_id": "01MINE", "created_at": "2026-10-17T08:00:30Z"],
+        ], "cursor": "end"])
+      case ProtocolIds.PUBLIC_GET_TWEET:
+        return ScriptedNode.json(ScriptedNode.tweet("01MINE", by: viewer, text: "mine"))
+      case ProtocolIds.PUBLIC_GET_TWEETS:
+        let reply: [String: Any] = ["parent_id": "01MINE", "root_id": "01MINE", "parent_user_id": viewer]
+        return ScriptedNode.json(["tweets": [
+          ScriptedNode.tweet("01OLD", by: "01BOB", text: "older", createdAt: "2026-10-16T08:00:00Z", extra: reply),
+          ScriptedNode.tweet("01CAROL", by: "01CAROL", text: "carol", createdAt: "2026-10-17T08:00:30Z", extra: reply),
+          ScriptedNode.tweet("01NEW", by: "01BOB", text: "welcome", createdAt: "2026-10-17T08:00:29Z", extra: reply),
+        ], "cursor": "end"])
+      default:
+        return Self.standardNode(route, body, timeline: [])
+      }
+    }
+    let notifications = try await decoder.decode([Models.Notification].self,
+                                                 from: router.route(Notifications.notifications(minId: nil, maxId: nil, types: nil, limit: 20),
+                                                                    method: .get).body)
+    XCTAssertEqual(notifications.first?.supportedType, .mention)
+    XCTAssertEqual(notifications.first?.status?.content.asRawText, "welcome")
+    XCTAssertEqual(notifications.first?.status?.account.id, "01BOB")
+    XCTAssertEqual(binding.calls(to: ProtocolIds.PUBLIC_GET_TWEETS).first?["parent_id"] as? String, "01MINE")
   }
 
   func testPushesHydrateOnlyWhatIsNewer() async throws {
@@ -470,6 +520,40 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(event["sender_id"] as? String, viewer)
     XCTAssertEqual(event["receiver_id"] as? String, "01BOB")
     XCTAssertEqual(event["text"] as? String, "ok")
+  }
+
+  func testChatMediaIsAttachedAndFetchedFromTheChatRoutes() async throws {
+    let viewer = ScriptedNode.viewerId
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PRIVATE_GET_MESSAGES:
+        return ScriptedNode.json(["chat_id": "chat1", "cursor": "end", "messages": [
+          ["id": "02", "chat_id": "chat1", "sender_id": "01BOB", "receiver_id": viewer, "text": "clip",
+           "image_keys": ["still"], "video_key": "vid", "created_at": "2026-10-17T08:00:00Z"],
+          ["id": "01", "chat_id": "chat1", "sender_id": "01BOB", "receiver_id": viewer, "text": "",
+           "image_keys": ["img1", "img2"], "created_at": "2026-10-17T07:59:00Z"],
+        ]])
+      case ProtocolIds.PUBLIC_GET_CHAT_IMAGE:
+        return ScriptedNode.json(["file": "data:image/png;base64,AQID"])
+      default:
+        return Self.standardNode(route, body, timeline: [])
+      }
+    }
+    let messages = try await decoder.decode([Status].self,
+                                            from: router.route(Chats.messages(chatId: "chat1"), method: .get).body)
+    XCTAssertEqual(messages[0].mediaAttachments.map { $0.url?.absoluteString },
+                   ["warpnet://chat-image/01BOB/img1", "warpnet://chat-image/01BOB/img2"])
+    let video = try XCTUnwrap(messages[1].mediaAttachments.first)
+    XCTAssertEqual(messages[1].mediaAttachments.count, 1)
+    XCTAssertEqual(video.url?.absoluteString, "warpnet://chat-video/01BOB/vid")
+    XCTAssertEqual(video.previewUrl?.absoluteString, "warpnet://chat-image/01BOB/still")
+
+    let data = try await router.mediaData(for: XCTUnwrap(messages[0].mediaAttachments.first?.url))
+    XCTAssertEqual(data, Data([1, 2, 3]))
+    let fetch = try XCTUnwrap(binding.calls(to: ProtocolIds.PUBLIC_GET_CHAT_IMAGE).first)
+    XCTAssertEqual(fetch["user_id"] as? String, "01BOB")
+    XCTAssertEqual(fetch["key"] as? String, "img1")
+    XCTAssertTrue(binding.calls(to: ProtocolIds.PUBLIC_GET_IMAGE).isEmpty)
   }
 
   func testProfileEditsGoToTheOwnUser() async throws {

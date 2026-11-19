@@ -16,6 +16,8 @@ final class PairingModel {
 
   static let shared = PairingModel(session: makeWarpnetSession(), accounts: .shared)
 
+  private static let restoreRetries = 3
+
   private(set) var phase: Phase = .scanning
   var notice: String?
 
@@ -56,7 +58,14 @@ final class PairingModel {
   func restore() async {
     guard let session else { return }
     phase = .restoring
-    guard let outcome = await session.restore() else {
+    var restored = await session.restore()
+    for _ in 0 ..< Self.restoreRetries {
+      guard case .transportError = restored else { break }
+      try? await Task.sleep(for: .seconds(1))
+      guard !Task.isCancelled else { break }
+      restored = await session.restore()
+    }
+    guard let outcome = restored else {
       phase = .scanning
       return
     }
@@ -89,7 +98,8 @@ final class PairingModel {
     case let .success(info):
       finish(info)
     case let .rejected(code, message):
-      phase = .failed(String(localized: "warpnet.pairing.error.rejected-\(code)-\(message)"), canRetry: false)
+      // A string, so the code is not shown with a thousands separator ("5.000").
+      phase = .failed(String(localized: "warpnet.pairing.error.rejected-\(String(code))-\(message)"), canRetry: false)
     case .peerIdMismatch:
       phase = .failed(String(localized: "warpnet.pairing.error.peer-mismatch"), canRetry: false)
     case let .transportError(message):

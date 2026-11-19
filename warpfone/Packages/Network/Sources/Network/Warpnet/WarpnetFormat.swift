@@ -81,6 +81,17 @@ enum WarpnetFormat {
     return "warpnet://video/\(pathComponent(userId))/\(pathComponent(key))"
   }
 
+  // Chat media is served by its own routes, which check chat membership.
+  static func chatImageURL(userId: String, key: String?) -> String? {
+    guard let key, !key.isEmpty, !userId.isEmpty else { return nil }
+    return "warpnet://chat-image/\(pathComponent(userId))/\(pathComponent(key))"
+  }
+
+  static func chatVideoURL(userId: String, key: String?) -> String? {
+    guard let key, !key.isEmpty, !userId.isEmpty else { return nil }
+    return "warpnet://chat-video/\(pathComponent(userId))/\(pathComponent(key))"
+  }
+
   static func missingImageURL(userId: String) -> String {
     "warpnet://image/\(pathComponent(userId))/missing.png"
   }

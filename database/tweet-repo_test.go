@@ -373,6 +373,25 @@ func (s *TweetRepoTestSuite) TestTweetsCount() {
 	s.Equal(uint64(1), count)
 }
 
+// A peer's tweets are cached again on every refresh of their profile.
+func (s *TweetRepoTestSuite) TestTweetsCountIgnoresStoringTheSameTweetAgain() {
+	userId := ulid.Make().String()
+	tweet := domain.Tweet{Id: ulid.Make().String(), UserId: userId, Text: "cached", CreatedAt: time.Now()}
+
+	for range 3 {
+		_, err := s.repo.CreateWithTTL(userId, tweet, time.Hour)
+		s.Require().NoError(err)
+	}
+
+	count, err := s.repo.TweetsCount(userId)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+	limit := uint64(10)
+	list, _, err := s.repo.List(userId, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(list, 1)
+}
+
 func (s *TweetRepoTestSuite) TestListTweets() {
 	userId := ulid.Make().String()
 	for i := 0; i < 3; i++ {
@@ -548,6 +567,35 @@ func (s *TweetRepoTestSuite) TestAddAndGetReply() {
 	s.Require().NoError(err)
 	s.Equal(reply.Text, got.Text)
 	s.Equal(reply.UserId, got.UserId)
+}
+
+func (s *TweetRepoTestSuite) TestUpdateReply() {
+	parentID := ulid.Make().String()
+	reply := domain.Tweet{
+		Id:        ulid.Make().String(),
+		RootId:    parentID,
+		ParentId:  &parentID,
+		UserId:    "user123",
+		Text:      "before",
+		CreatedAt: time.Now(),
+	}
+	_, err := s.repo.AddReply(reply, true)
+	s.Require().NoError(err)
+
+	s.ErrorIs(s.repo.Update(domain.Tweet{Id: reply.Id, UserId: reply.UserId, Text: "after"}), ErrTweetNotFound,
+		"a reply is not among its author's tweets")
+	s.Require().NoError(s.repo.UpdateReply(parentID, domain.Tweet{Id: reply.Id, UserId: reply.UserId, Text: "after"}))
+
+	got, err := s.repo.GetReply(parentID, reply.Id)
+	s.Require().NoError(err)
+	s.Equal("after", got.Text)
+	s.NotNil(got.UpdatedAt)
+	replies, _, err := s.repo.GetReplies(parentID, nil, nil)
+	s.Require().NoError(err)
+	s.Len(replies, 1)
+	count, err := s.repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
 }
 
 func (s *TweetRepoTestSuite) TestRepliesCount() {
@@ -1276,6 +1324,320 @@ func (s *TweetRepoLifecycleTestSuite) TestDoubleRetweetDoesNotDuplicateRetweeter
 	got, _, err := s.repo.Retweeters(tweet.Id, nil, nil)
 	s.Require().NoError(err)
 	s.Len(got, 1, "one user is one retweeter no matter how often they click")
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count, "a repeat retweet must not count")
+
+	s.Require().NoError(s.repo.UnRetweet(booster, tweet.Id, false))
+	count, err = s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count, "one unretweet must cancel the retweet")
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestDoubleRetweetOfOwnTweetCountsOnce() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "boost myself twice")
+
+	for i := 0; i < 2; i++ {
+		retweet, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &author,
+		}, false)
+		s.Require().NoError(err)
+		s.Equal(domain.RetweetPrefix+tweet.Id, retweet.Id)
+	}
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestConcurrentRetweetsBySameUserCountOnce() {
+	author := ulid.Make().String()
+	booster := ulid.Make().String()
+	tweet := s.newTweet(author, "two devices, one user")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.repo.NewRetweet(domain.Tweet{
+				Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
+			}, false)
+			if err != nil {
+				s.ErrorIs(err, local_store.ErrConflict)
+			}
+		}()
+	}
+	wg.Wait()
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfSelfRetweetAfterSourceIsDeleted() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "boost, then delete")
+	_, err := s.repo.NewRetweet(domain.Tweet{
+		Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &author,
+	}, false)
+	s.Require().NoError(err)
+	s.Require().NoError(s.repo.Delete(author, tweet.Id))
+
+	s.Require().NoError(s.repo.UnRetweet(author, tweet.Id, false))
+
+	_, err = s.repo.Get(author, domain.RetweetPrefix+tweet.Id)
+	s.ErrorIs(err, ErrTweetNotFound)
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestSimultaneousTweetsAreAllStored() {
+	author := ulid.Make().String()
+	const tweets = 64
+
+	errs := make([]error, tweets)
+	var wg sync.WaitGroup
+	for i := 0; i < tweets; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = s.repo.Create(author, domain.Tweet{UserId: author, Text: strconv.Itoa(i)})
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(tweets), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestSimultaneousDeletesKeepTheCount() {
+	author := ulid.Make().String()
+	const tweets = 32
+
+	ids := make([]string, tweets)
+	for i := range ids {
+		ids[i] = s.newTweet(author, strconv.Itoa(i)).Id
+	}
+
+	errs := make([]error, tweets)
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = s.repo.Delete(author, id)
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestSimultaneousRepliesToOneTweetAreAllStored() {
+	author := ulid.Make().String()
+	parent := s.newTweet(author, "thread").Id
+	const replies = 32
+
+	errs := make([]error, replies)
+	var wg sync.WaitGroup
+	for i := 0; i < replies; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = s.repo.AddReply(domain.Tweet{UserId: author, Text: strconv.Itoa(i), ParentId: &parent}, false)
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.RepliesCount(parent)
+	s.Require().NoError(err)
+	s.Equal(uint64(replies), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestOneTweetDeletedSimultaneouslyCountsOnce() {
+	author := ulid.Make().String()
+	kept := s.newTweet(author, "stays")
+	tweet := s.newTweet(author, "deleted from every device")
+
+	errs := make([]error, 16)
+	var wg sync.WaitGroup
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = s.repo.Delete(author, tweet.Id)
+		}()
+	}
+	wg.Wait()
+
+	deleted := 0
+	for _, err := range errs {
+		if err == nil {
+			deleted++
+			continue
+		}
+		s.ErrorIs(err, ErrTweetNotFound)
+	}
+	s.Equal(1, deleted)
+
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+	_, err = s.repo.Get(author, kept.Id)
+	s.NoError(err)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestOneReplyDeletedSimultaneouslyCountsOnce() {
+	author := ulid.Make().String()
+	parent := s.newTweet(author, "thread").Id
+	_, err := s.repo.AddReply(domain.Tweet{UserId: author, Text: "stays", ParentId: &parent}, false)
+	s.Require().NoError(err)
+	reply, err := s.repo.AddReply(domain.Tweet{UserId: author, Text: "goes", ParentId: &parent}, false)
+	s.Require().NoError(err)
+
+	var wg sync.WaitGroup
+	for range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = s.repo.DeleteReply(parent, reply.Id, false)
+		}()
+	}
+	wg.Wait()
+
+	count, err := s.repo.RepliesCount(parent)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestMixedWritesOfOneAuthorKeepTheCount() {
+	author := ulid.Make().String()
+	parent := s.newTweet(author, "thread").Id
+	const workers = 24
+
+	seeded := make([]string, workers)
+	for i := range seeded {
+		seeded[i] = s.newTweet(author, "to delete").Id
+	}
+
+	errs := make(chan error, workers*4)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: strconv.Itoa(i)})
+			errs <- err
+			errs <- s.repo.Delete(author, seeded[i])
+			_, err = s.repo.AddReply(domain.Tweet{UserId: author, Text: "reply", ParentId: &parent}, false)
+			errs <- err
+			_, err = s.repo.RecordView(parent, strconv.Itoa(i), false)
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(workers+1), count, "the thread root plus one new tweet per worker")
+	replies, err := s.repo.RepliesCount(parent)
+	s.Require().NoError(err)
+	s.Equal(uint64(workers), replies)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestRepeatRetweetByItsFeedIdCountsOnce() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "retweeted from the feed entry")
+
+	for _, id := range []string{tweet.Id, domain.RetweetPrefix + tweet.Id} {
+		retweet, err := s.repo.NewRetweet(domain.Tweet{
+			Id: id, UserId: author, Text: tweet.Text, RetweetedBy: &author,
+		}, false)
+		s.Require().NoError(err)
+		s.Equal(domain.RetweetPrefix+tweet.Id, retweet.Id)
+	}
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestStoredCopyIsNotMistakenForARetweet() {
+	author := ulid.Make().String()
+	booster := ulid.Make().String()
+	tweet := s.newTweet(author, "cached under the booster")
+	_, err := s.repo.Create(booster, domain.Tweet{Id: tweet.Id, UserId: author, Text: tweet.Text})
+	s.Require().NoError(err)
+
+	_, err = s.repo.NewRetweet(domain.Tweet{
+		Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
+	}, false)
+	s.Require().NoError(err)
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestRetweetAgainAfterUnretweetCounts() {
+	author := ulid.Make().String()
+	booster := ulid.Make().String()
+	tweet := s.newTweet(author, "changed my mind")
+	retweet := domain.Tweet{Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster}
+
+	_, err := s.repo.NewRetweet(retweet, false)
+	s.Require().NoError(err)
+	s.Require().NoError(s.repo.UnRetweet(booster, tweet.Id, false))
+	_, err = s.repo.NewRetweet(retweet, false)
+	s.Require().NoError(err)
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestQuoteDoesNotBlockPlainRetweet() {
+	author := ulid.Make().String()
+	booster := ulid.Make().String()
+	tweet := s.newTweet(author, "quote, then boost")
+
+	for i := 0; i < 2; i++ {
+		_, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: booster, Text: "my take", RetweetedBy: &booster,
+			QuotedTweetId: &tweet.Id, QuotedUserId: &author,
+		}, false)
+		s.Require().NoError(err)
+	}
+	_, err := s.repo.NewRetweet(domain.Tweet{
+		Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
+	}, false)
+	s.Require().NoError(err)
+
+	_, err = s.repo.Get(booster, tweet.Id)
+	s.NoError(err, "the plain retweet must be stored after the quotes")
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(3), count, "every quote and the plain retweet count")
 }
 
 func (s *TweetRepoLifecycleTestSuite) TestRetweetWithoutRetweeterIsRejected() {

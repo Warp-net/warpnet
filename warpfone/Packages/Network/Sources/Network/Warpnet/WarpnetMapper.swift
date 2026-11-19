@@ -144,17 +144,19 @@ enum WarpnetMapper {
     plainStatus(id: message.id,
                 text: message.text,
                 account: sender.map { account($0) } ?? account(userId: message.senderId, username: ""),
-                createdAt: message.createdAt)
+                createdAt: message.createdAt,
+                media: attachments(message))
   }
 
-  private static func plainStatus(id: String, text: String, account: MastodonAccount, createdAt: String) -> MastodonStatus {
+  private static func plainStatus(id: String, text: String, account: MastodonAccount, createdAt: String,
+                                  media: [MastodonMediaAttachment] = []) -> MastodonStatus {
     MastodonStatus(id: id,
                    content: WarpnetFormat.html(fromPlainText: text),
                    account: account,
                    createdAt: WarpnetFormat.serverDate(fromRFC3339: createdAt),
                    editedAt: nil,
                    reblog: nil,
-                   mediaAttachments: [],
+                   mediaAttachments: media,
                    repliesCount: 0,
                    reblogsCount: 0,
                    favouritesCount: 0,
@@ -262,6 +264,18 @@ enum WarpnetMapper {
       media.append(MastodonMediaAttachment(id: key, type: "video", url: url, previewUrl: nil, description: nil))
     }
     return media
+  }
+
+  // Chat media lives on the sender's node, behind the chat media routes.
+  private static func attachments(_ message: WarpnetMessage) -> [MastodonMediaAttachment] {
+    if let url = WarpnetFormat.chatVideoURL(userId: message.senderId, key: message.videoKey), let key = message.videoKey {
+      let still = WarpnetFormat.chatImageURL(userId: message.senderId, key: message.imageKeys.first)
+      return [MastodonMediaAttachment(id: key, type: "video", url: url, previewUrl: still, description: nil)]
+    }
+    return message.imageKeys.compactMap { key in
+      guard let url = WarpnetFormat.chatImageURL(userId: message.senderId, key: key) else { return nil }
+      return MastodonMediaAttachment(id: key, type: "image", url: url, previewUrl: url, description: nil)
+    }
   }
 
   private static func poll(_ tweet: WarpnetTweet, address: StatusAddress, results: PollResultsResponse?) -> MastodonPoll? {

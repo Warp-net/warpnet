@@ -91,7 +91,7 @@ func (s stubWalletBackend) Splitter() string { return "TSplitter" }
 func walletKey() ed25519.PrivateKey { return make(ed25519.PrivateKey, ed25519.PrivateKeySize) }
 
 func ownerAuth() stubWalletOwner {
-	return stubWalletOwner{owner: domain.Owner{Username: "alice", UserId: "u1"}}
+	return stubWalletOwner{owner: domain.Owner{Login: "alice", UserId: "u1"}}
 }
 
 func marshalWallet(t *testing.T, v any) []byte {

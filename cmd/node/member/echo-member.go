@@ -115,7 +115,7 @@ func main() {
 		CreatedAt:       time.Now(),
 		UserId:          echoOwnerID,
 		RedundantUserID: echoOwnerID,
-		Username:        username,
+		Login:           username,
 	})
 
 	userRepo := database.NewUserRepo(db)

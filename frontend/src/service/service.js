@@ -927,6 +927,18 @@ export const warpnetService = {
             && ((owner && tw.user_id === owner.user_id) || !hidden(tw.text)));
     },
 
+    // An older page for the list's own scrolling; unlike getNotifications it
+    // leaves the shared cursor and the badge state alone.
+    async getNotificationsPage(cursor) {
+        return await this.sendToNode({
+            path: PRIVATE_GET_NOTIFICATIONS,
+            body: {
+                limit: defaultLimit,
+                cursor: cursor,
+            },
+        });
+    },
+
     async getNotifications(cursorReset) {
         let cursor = this.getCursor('notifications')
         if (cursorReset) {
@@ -1450,16 +1462,21 @@ export const warpnetService = {
         });
     },
 
-    async editTweet(tweetId, text) {
+    // A reply is stored under its parent, so the node needs parentId to find it.
+    async editTweet(tweetId, text, parentId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
+        const body = {
+            tweet_id: tweetId,
+            user_id: owner.user_id,
+            text: text,
+        };
+        if (parentId) {
+            body.parent_id = parentId;
+        }
         return await this.sendToNode({
             path: PRIVATE_POST_TWEET_EDIT,
-            body: {
-                tweet_id: tweetId,
-                user_id: owner.user_id,
-                text: text,
-            },
+            body,
         });
     },
 
@@ -2397,7 +2414,7 @@ export const warpnetService = {
         localStorage.removeItem(cacheKey)
     },
 
-    async retweetTweet({tweetId, userId, username, text, comment}) {
+    async retweetTweet({tweetId, userId, username, text, comment, parentId}) {
         const owner = this.getOwnerProfile()
         tweetId = sourceTweetId(tweetId)
 
@@ -2430,6 +2447,7 @@ export const warpnetService = {
                 user_id: userId,
                 username: username,
                 text: text,
+                parent_id: parentId,
                 retweeted_by: owner.user_id,
                 created_at: new Date().toISOString(),
                 root_id: "",
@@ -2657,6 +2675,16 @@ export const warpnetService = {
                     data_saver: prefs.dataSaver ? 'true' : 'false',
                 },
             },
+        });
+    },
+
+    // allowNostr records the sign-up consent to show the owner's content on
+    // Nostr. The gateway reads it from the profile metadata; it is never
+    // revoked.
+    async allowNostr() {
+        return await this.sendToNode({
+            path: PRIVATE_POST_USER,
+            body: {metadata: {nostr: 'allow'}},
         });
     },
 

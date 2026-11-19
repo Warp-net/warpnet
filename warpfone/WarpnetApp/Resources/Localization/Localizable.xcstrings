@@ -1425,7 +1425,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Search people or @name@server"
+            "value" : "Search people"
           }
         }
       }
@@ -4074,12 +4074,12 @@
         }
       }
     },
-    "warpnet.pairing.error.rejected-%lld-%@" : {
+    "warpnet.pairing.error.rejected-%@-%@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pairing rejected (%1$lld): %2$@"
+            "value" : "Pairing rejected (%1$@): %2$@"
           }
         }
       }
@@ -4099,7 +4099,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Could not read QR: %@"
+            "value" : "Could not read the pairing data: %@"
           }
         }
       }

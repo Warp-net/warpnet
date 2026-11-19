@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 vi.mock('@/service/service', () => ({
   warpnetService: {
     signInUser: vi.fn(),
+    allowNostr: vi.fn(),
     isFirstRun: vi.fn(),
     consumePendingDeepLink: vi.fn(),
     isDesktopNode: vi.fn(),
@@ -57,6 +58,8 @@ beforeEach(() => {
   routerReplace.mockClear();
   warpnetService.resumeSession.mockResolvedValue(false);
   warpnetService.signInUser.mockResolvedValue(undefined);
+  warpnetService.allowNostr.mockReset();
+  warpnetService.allowNostr.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
   warpnetService.consumePendingDeepLink.mockResolvedValue("");
   warpnetService.isDesktopNode.mockReturnValue(true);
@@ -114,7 +117,7 @@ describe('Root.vue', () => {
 
     expect(await screen.findByText(/Create your account/i)).toBeInTheDocument();
     expect(screen.getByText(/Step 1 of 4/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Username/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Login/i)).toBeInTheDocument();
   });
 
   it('keeps the Next button disabled in step 1 while username is empty (disabled state)', async () => {
@@ -137,7 +140,7 @@ describe('Root.vue', () => {
     );
 
     // Step 1: username
-    const usernameField = await screen.findByLabelText(/Username/i);
+    const usernameField = await screen.findByLabelText(/Login/i);
     await fireEvent.update(usernameField, 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
@@ -161,6 +164,7 @@ describe('Root.vue', () => {
     // Step 4: final Sign up (two "Sign up" buttons exist now — the landing one
     // and the modal one; the latter appears after the flow reaches step 4).
     await screen.findByText(/Step 4 of 4/i);
+    await fireEvent.click(screen.getByLabelText(/Don't allow/));
     const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
 
@@ -206,7 +210,7 @@ describe('Root.vue', () => {
     );
 
     // Step 1
-    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.update(await screen.findByLabelText(/Login/i), 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // Step 2
@@ -227,6 +231,7 @@ describe('Root.vue', () => {
 
     // Step 4
     await screen.findByText(/Step 4 of 4/i);
+    await fireEvent.click(screen.getByLabelText(/Don't allow/));
     const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
 
@@ -241,7 +246,7 @@ describe('Root.vue', () => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
-    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.update(await screen.findByLabelText(/Login/i), 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     const checkboxes = await screen.findAllByRole('checkbox');
@@ -265,11 +270,11 @@ describe('Root.vue', () => {
   //
   // Drive the modal sign-up to the final step so we exercise the
   // real signMeUp() handler.
-  const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD } = {}) => {
+  const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD, nostr = 'deny' } = {}) => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
-    await fireEvent.update(await screen.findByLabelText(/Username/i), username);
+    await fireEvent.update(await screen.findByLabelText(/Login/i), username);
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     const checkboxes = await screen.findAllByRole('checkbox');
@@ -281,9 +286,45 @@ describe('Root.vue', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     await screen.findByText(/Step 4 of 4/i);
+    if (nostr) await fireEvent.click(screen.getByLabelText(nostr === 'allow' ? /^Allow$/ : /Don't allow/));
     const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
   };
+
+  it('asks about Nostr before the account can be created', async () => {
+    renderRoot({ firstRun: true });
+    await completeSignUp({ nostr: '' });
+
+    const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
+    expect(signUpButtons[signUpButtons.length - 1]).toBeDisabled();
+    expect(warpnetService.signInUser).not.toHaveBeenCalled();
+  });
+
+  it('saves the Nostr consent after sign-up when allowed', async () => {
+    renderRoot({ firstRun: true });
+    await completeSignUp({ nostr: 'allow' });
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
+    expect(warpnetService.allowNostr).toHaveBeenCalledTimes(1);
+    expect(warpnetService.signInUser.mock.invocationCallOrder[0])
+      .toBeLessThan(warpnetService.allowNostr.mock.invocationCallOrder[0]);
+  });
+
+  it('stores nothing about Nostr when not allowed', async () => {
+    renderRoot({ firstRun: true });
+    await completeSignUp({ nostr: 'deny' });
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
+    expect(warpnetService.allowNostr).not.toHaveBeenCalled();
+  });
+
+  it('still signs in when saving the Nostr consent fails', async () => {
+    warpnetService.allowNostr.mockRejectedValueOnce(new Error('node busy'));
+    renderRoot({ firstRun: true });
+    await completeSignUp({ nostr: 'allow' });
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
+  });
 
   it('does not auto-open the pairing QR after a first-run signup', async () => {
     renderRoot({ firstRun: true });
@@ -352,7 +393,7 @@ describe('Root.vue', () => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
-    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.update(await screen.findByLabelText(/Login/i), 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     const checkboxes = await screen.findAllByRole('checkbox');
     for (const cb of checkboxes) await fireEvent.click(cb);

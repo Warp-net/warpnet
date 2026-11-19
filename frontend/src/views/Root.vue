@@ -157,7 +157,7 @@ resulting from the use or misuse of this software.
             </div>
             <p class="text-sm text-dark mb-4">Step 1 of 4</p>
             <div class="w-full bg-lightblue border-b-2 border-dark mb-8 p-2">
-              <label for="signup-username" class="text-dark">Username</label>
+              <label for="signup-username" class="text-dark">Login</label>
               <input
                 id="signup-username"
                 v-model="username"
@@ -335,6 +335,22 @@ resulting from the use or misuse of this software.
               <p class="text-2xl font-bold">Create your account</p>
             </div>
 
+            <fieldset class="mb-6">
+              <legend class="font-bold mb-2">Show your posts on Nostr?</legend>
+              <p class="text-sm text-dark mb-3">
+                Nostr is another open network. If you allow it, your public posts, replies,
+                reactions and follows also appear there. You can't change this later.
+              </p>
+              <label class="flex items-center mb-2 cursor-pointer">
+                <input v-model="nostrConsent" type="radio" value="allow" class="mr-2" />
+                Allow
+              </label>
+              <label class="flex items-center cursor-pointer">
+                <input v-model="nostrConsent" type="radio" value="deny" class="mr-2" />
+                Don't allow
+              </label>
+            </fieldset>
+
             <p>
               By signing up, you agree to our
               <a href="https://warpnet.site/legal-doc" target="_blank" rel="noopener" class="text-blue">Terms and Privacy Policy</a>.
@@ -343,6 +359,8 @@ resulting from the use or misuse of this software.
               v-if="!isLoading"
               @click="signMeUp"
               class="w-full rounded-full mt-4 py-3 bg-blue text-white font-bold hover:bg-darkblue"
+              :class="!nostrConsent ? 'opacity-50 cursor-not-allowed' : ''"
+              :disabled="!nostrConsent"
             >
               Sign up
             </button>
@@ -388,6 +406,7 @@ export default {
       contentDistribution: false,
       futureAds: false,
       localStorageLoss: false,
+      nostrConsent: "",
       signUpError: "",
       firstRunError: false,
       firstRunErrorMessage: "",
@@ -457,6 +476,7 @@ export default {
       }
     },
     async signMeUp() {
+      if (!this.nostrConsent) return;
       try {
         this.isLoading = true;
         this.signUpError = "";
@@ -464,6 +484,13 @@ export default {
           username: this.username,
           password: this.password,
         });
+        if (this.nostrConsent === "allow") {
+          try {
+            await warpnetService.allowNostr();
+          } catch (err) {
+            console.error("failed to save the Nostr consent:", err);
+          }
+        }
         this.setStep("");
         // No Vue route by id — route via Search (same as SearchBar).
         const deepLink = parseDeepLink(await warpnetService.consumePendingDeepLink());

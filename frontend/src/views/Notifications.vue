@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
   <div id="app" class="flex container h-screen w-full">
       <SideNav />
 
-      <div class="w-full h-full overflow-y-scroll no-scrollbar">
+      <div ref="scroller" class="w-full h-full overflow-y-scroll no-scrollbar">
         <div class="px-5 py-3 border-lighter flex items-center justify-between">
           <button
               @click="gotoHome()"
@@ -33,7 +33,34 @@ resulting from the use or misuse of this software.
           >
             <i class="fas fa-arrow-left text-blue"></i>
           </button>
-          <h1 class="text-xl font-bold">Notifications</h1>
+          <div ref="typeMenu" class="relative">
+            <button
+              type="button"
+              class="flat-btn text-xl font-bold flex items-center"
+              aria-label="Notification type"
+              :aria-expanded="typeMenuOpen"
+              @click="typeMenuOpen = !typeMenuOpen"
+            >
+              <h1>{{ typeFilterLabel }}</h1>
+              <i class="fas fa-chevron-down text-xs ml-2 text-dark" aria-hidden="true"></i>
+            </button>
+            <div
+              v-if="typeMenuOpen"
+              class="absolute left-0 mt-2 w-48 bg-white dark:bg-darktheme-card rounded-md shadow-lg py-1 z-10"
+            >
+              <button
+                v-for="[type, label] in typeFilters"
+                :key="type"
+                type="button"
+                class="flex items-center w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn"
+                @click="selectType(type)"
+              >
+                <i :class="typeIcon(type)" class="w-5"></i>
+                <span class="ml-2">{{ label }}</span>
+                <i v-if="typeFilter === type" class="fas fa-check ml-auto text-blue"></i>
+              </button>
+            </div>
+          </div>
           <div ref="settingsMenu" class="relative">
             <button
               type="button"
@@ -86,103 +113,87 @@ resulting from the use or misuse of this software.
 
         <!-- notifications -->
         <Loader :loading="loading" />
-        <div v-if="mode === 'All'">
+        <div v-if="mode === 'All' || mode === 'Mentions'">
           <div
-            v-if="!loading && notifications.length === 0"
+            v-if="!loading && groups.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10"
           >
             <div class="w-1/2 flex flex-col items-center justify-center">
-              <p class="font-bold text-lg">No notifications yet</p>
+              <p class="font-bold text-lg">{{ mode === 'Mentions' ? 'No mentions yet' : 'No notifications yet' }}</p>
               <p class="text-sm text-dark">Wait until some get shown here.</p>
             </div>
           </div>
 
-          <div v-for="notification in notifications" :key="notification.id">
-            <button
-              type="button"
-              class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
-              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground'"
-              @click="openNotification(notification)"
-            >
-              <div class="w-full flex items-center">
-                <div class="flex flex-row items-center mr-3 md:mr-4 text-2xl flex-none">
-                  <i
-                    v-if="notification.type === 'reply'"
-                    class="pt-1 fas fa-comment text-blue"
-                  ></i>
-                  <i
-                    v-if="notification.type === 'reaction'"
-                    class="pt-1 fas fa-heart text-red-600"
-                  ></i>
-                  <i
-                    v-if="notification.type === 'retweet'"
-                    class="pt-1 fas fa-retweet text-green-500"
-                  ></i>
-                  <i
-                    v-if="notification.type === 'follow'"
-                    class="pt-1 fas fa-user-plus text-blue"
-                  ></i>
-                  <i
-                    v-if="notification.type === 'moderation'"
-                    class="pt-1 fas fa-shield-alt text-blue"
-                  ></i>
-                  <i
-                    v-if="notification.type === 'message'"
-                    class="pt-1 fas fa-envelope text-blue"
-                  ></i>
-                  <i
-                    v-if="notification.type === 'order_limit'"
-                    class="pt-1 fas fa-pepper-hot text-blue"
-                  ></i>
-
-                  <img
-                    :src="avatarFor(notification)"
-                    class="h-8 w-8 ml-2 rounded-full flex-none"
-                  />
-                </div>
-                <div class="flex items-center w-full">
-                  <p class="text-sm">{{ notification.text }}</p>
-                  <p class="text-sm text-dark ml-auto">
-                    {{ $filters.timeago(notification.created_at) }}
-                  </p>
-                </div>
-              </div>
-            </button>
-          </div>
-        </div>
-        <div v-if="mode === 'Mentions'">
           <div
-            v-if="mentions.length === 0"
-            class="flex flex-col items-center justify-center w-full pt-10"
+            v-for="group in groups"
+            :key="group.key"
+            role="button"
+            tabindex="0"
+            class="w-full text-left px-3 py-2 md:px-4 md:py-3 border-b hover:bg-lightest flex cursor-pointer"
+            :class="group.items.every(n => n.is_read) ? '' : 'bg-lightblue dark:bg-darktheme-foreground'"
+            @click="openGroup(group)"
+            @keyup.enter="openGroup(group)"
           >
-            <div class="w-1/2 flex flex-col items-center justify-center">
-              <p class="font-bold text-lg">No mentions yet</p>
-              <p class="text-sm text-dark">Wait until some get shown here.</p>
+            <!-- the type icon sits on the actor's avatar; grid stacking, not positioning -->
+            <div class="grid flex-none h-10 w-10 mr-3">
+              <button
+                v-if="group.actors.length === 1"
+                type="button"
+                class="flat-btn rounded-full"
+                style="grid-area: 1 / 1"
+                :aria-label="actorName(group.actors[0])"
+                @click.stop="openActor(group.head, group.actors[0])"
+              >
+                <img :src="avatarFor(group.actors[0])" alt="" class="h-10 w-10 rounded-full object-cover" />
+              </button>
+              <span
+                class="rounded-full bg-white dark:bg-darktheme-card flex items-center justify-center"
+                :class="group.actors.length === 1 ? 'h-5 w-5 -ml-1 -mt-1 text-xs' : 'h-10 w-10 text-2xl'"
+                style="grid-area: 1 / 1"
+              >
+                <i :class="typeIcon(group.head.type)"></i>
+              </span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div v-if="group.actors.length > 1" class="flex flex-wrap gap-1 mb-1">
+                <button
+                  v-for="actorId in group.actors"
+                  :key="actorId"
+                  type="button"
+                  class="flat-btn rounded-full"
+                  :aria-label="actorName(actorId)"
+                  @click.stop="openActor(group.head, actorId)"
+                >
+                  <img :src="avatarFor(actorId)" alt="" class="h-8 w-8 rounded-full object-cover" />
+                </button>
+              </div>
+              <p class="text-sm break-words">
+                <template v-if="labelOf(group).name">
+                  <button
+                    type="button"
+                    class="flat-btn font-bold hover:underline"
+                    @click.stop="openActor(group.head, group.actors[0])"
+                  >{{ labelOf(group).name }}</button>{{ labelOf(group).rest }}
+                </template>
+                <template v-else>{{ group.head.text }}</template>
+                <span class="text-dark"> · {{ $filters.timeago(group.head.created_at) }}</span>
+              </p>
+              <p
+                v-if="group.head.type === 'follow' && group.actors.length === 1 && actorProfiles[group.actors[0]]?.bio"
+                class="text-sm text-dark mt-1 line-clamp-2 break-words"
+              >{{ actorProfiles[group.actors[0]].bio }}</p>
+              <div
+                v-if="tweets[group.head.tweet_id]"
+                class="mt-2 border border-lighter rounded p-3 bg-lightest text-sm hover:bg-lighter"
+                @click.stop="openTweet(group.head)"
+              >
+                <p v-if="tweets[group.head.tweet_id].text" class="line-clamp-4 break-words text-dark">{{ tweets[group.head.tweet_id].text }}</p>
+                <p v-else class="text-dark italic">View tweet</p>
+              </div>
             </div>
           </div>
-          <div v-for="notification in mentions" :key="notification.id">
-            <button
-              type="button"
-              class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
-              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground'"
-              @click="openNotification(notification)"
-            >
-              <div class="w-full flex items-center">
-                <div class="flex flex-row items-center mr-3 md:mr-4 text-2xl flex-none">
-                  <img
-                    :src="avatarFor(notification)"
-                    class="h-8 w-8 ml-2 rounded-full flex-none"
-                  />
-                </div>
-                <div class="flex items-center w-full">
-                  <p class="text-sm">{{ notification.text }}</p>
-                  <p class="text-sm text-dark ml-auto">
-                    {{ $filters.timeago(notification.created_at) }}
-                  </p>
-                </div>
-              </div>
-            </button>
-          </div>
+          <div ref="pageEnd" class="h-px"></div>
+          <p v-if="loadingMore" class="text-center text-sm text-dark py-3">Loading…</p>
         </div>
         <div v-if="mode === 'Requests' && locked">
           <div
@@ -237,6 +248,29 @@ import DefaultRightBar from "../components/DefaultRightBar.vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 
+const TYPE_FILTERS = [
+  ['', 'Notifications'],
+  ['reaction', 'Reactions'],
+  ['retweet', 'Retweets'],
+  ['follow', 'Follows'],
+  ['reply', 'Replies'],
+  ['message', 'Messages'],
+  ['moderation', 'Moderation'],
+  ['order_limit', 'Order limits'],
+];
+
+// The node writes "<username> <action>" with the name as it knew it then.
+const ACTIONS = [
+  / started following you$/,
+  / reacted your tweet$/,
+  / retweeted your tweet$/,
+  / quoted your tweet$/,
+  / replied to your tweet$/,
+  / sent you a message$/,
+  / joined Warpnet$/,
+  / bought \d+ of your tweets .*$/,
+];
+
 export default {
   name: "Notifications",
   components: {
@@ -256,8 +290,16 @@ export default {
       overlayOpen: false,
       overlayNotificationId: '',
       settingsOpen: false,
+      typeMenuOpen: false,
+      typeFilter: '',
+      typeFilters: TYPE_FILTERS,
+      nextCursor: '',
+      loadingMore: false,
       actorAvatars: {},
+      actorProfiles: {},
       pendingAvatars: new Set(),
+      tweets: {},
+      pendingTweets: new Set(),
     };
   },
   computed: {
@@ -265,6 +307,29 @@ export default {
       // Warpnet emits "reply" (never "mention") when someone responds to you,
       // so the Mentions tab keys off replies too.
       return this.notifications.filter(n => n.type === 'mention' || n.type === 'reply');
+    },
+    shown() {
+      if (this.mode === 'Mentions') return this.mentions;
+      if (!this.typeFilter) return this.notifications;
+      return this.notifications.filter(n => n.type === this.typeFilter);
+    },
+    typeFilterLabel() {
+      return TYPE_FILTERS.find(([type]) => type === this.typeFilter)[1];
+    },
+    // Follows group together, reactions and retweets group per tweet; the
+    // rest stay one row each. A list filtered to follows keeps them apart.
+    groups() {
+      const byKey = new Map();
+      for (const n of this.shown) {
+        let key = n.id;
+        if (n.type === 'follow' && this.typeFilter !== 'follow') key = 'follow';
+        if ((n.type === 'reaction' || n.type === 'retweet') && n.tweet_id) key = `${n.type}-${n.tweet_id}`;
+        if (!byKey.has(key)) byKey.set(key, { key, head: n, items: [], actors: [] });
+        const group = byKey.get(key);
+        group.items.push(n);
+        if (n.actor_id && !group.actors.includes(n.actor_id)) group.actors.push(n.actor_id);
+      }
+      return [...byKey.values()];
     },
   },
   methods: {
@@ -282,27 +347,85 @@ export default {
         query: { m: m, hash: Date.now() },
       });
     },
-    openNotification(notification) {
-      // Mark this one read so the badge decrements even if the click
-      // ends up not navigating (overlay / unknown type).
-      this.markRead(notification);
-      // A tweet notification opens the tweet, an actor-only one (follow,
-      // new user, order limit) opens the actor's profile; the rest
-      // (moderation) fall back to the overlay.
-      if (notification?.tweet_id) {
-        this.$router.push({
-          name: 'Tweet',
-          params: { id: notification.tweet_id },
-          query: { u: notification.user_id || '' },
-        });
+    selectType(type) {
+      this.typeMenuOpen = false;
+      this.typeFilter = type;
+      if (this.mode !== 'All') this.submit('All');
+      this.fillPage();
+    },
+    // A tweet notification opens the tweet, a message opens the chat, a
+    // group of follows opens the follower list, an actor-only one opens the
+    // actor's profile; the rest (moderation) fall back to the overlay.
+    async openGroup(group) {
+      const n = group.head;
+      group.items.forEach(item => this.markRead(item));
+      if (n.tweet_id) {
+        this.openTweet(n);
         return;
       }
-      if (notification?.actor_id) {
-        this.$router.push({ name: 'Profile', params: { id: notification.actor_id } });
+      if (n.type === 'message' && n.actor_id) {
+        try {
+          const chat = await warpnetService.createChat(n.actor_id);
+          if (chat && chat.id) {
+            this.$router.push({ name: 'Messages', params: { id: this.ownerProfile.user_id, chatId: chat.id } });
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to open the chat:', err);
+        }
+        toast.error("Couldn't open the chat with this user.");
         return;
       }
-      this.overlayNotificationId = notification?.id || '';
+      if (group.actors.length > 1) {
+        this.$router.push({ name: 'Followers', params: { id: this.ownerProfile.user_id } });
+        return;
+      }
+      if (n.actor_id) {
+        this.openActor(n, n.actor_id);
+        return;
+      }
+      this.overlayNotificationId = n.id || '';
       this.overlayOpen = true;
+    },
+    openTweet(notification) {
+      this.markRead(notification);
+      this.$router.push({
+        name: 'Tweet',
+        params: { id: notification.tweet_id },
+        query: { u: notification.user_id || '' },
+      });
+    },
+    openActor(notification, actorId) {
+      this.markRead(notification);
+      this.$router.push({ name: 'Profile', params: { id: actorId } });
+    },
+    typeIcon(type) {
+      return {
+        reply: 'fas fa-comment text-blue',
+        mention: 'fas fa-at text-blue',
+        reaction: 'fas fa-heart text-red-600',
+        retweet: 'fas fa-retweet text-green-500',
+        follow: 'fas fa-user-plus text-blue',
+        moderation: 'fas fa-shield-alt text-blue',
+        message: 'fas fa-envelope text-blue',
+        order_limit: 'fas fa-pepper-hot text-blue',
+      }[type] || 'fas fa-bell text-blue';
+    },
+    actorName(actorId) {
+      return this.actorProfiles[actorId]?.username || '';
+    },
+    // The name comes from the actor's profile, so a rename shows; the action
+    // stays as the node phrased it.
+    labelOf(group) {
+      const name = this.actorName(group.actors[0]);
+      const text = group.head.text || '';
+      if (!name) return { name: '', rest: text };
+      const others = group.actors.length - 1;
+      const and = others > 0 ? ` and ${others} ${others === 1 ? 'other' : 'others'}` : '';
+      const action = ACTIONS.map(re => text.match(re)).find(Boolean);
+      if (action) return { name, rest: and + action[0] };
+      if (text.startsWith(name + ' ')) return { name, rest: and + text.slice(name.length) };
+      return { name, rest: and + ' · ' + text };
     },
     async markRead(notification) {
       if (!notification || !notification.id || notification.is_read) return;
@@ -328,19 +451,49 @@ export default {
       this.settingsOpen = false;
       await this.markAllRead();
     },
-    avatarFor(n) {
-      return (n && n.actor_id && this.actorAvatars[n.actor_id]) || '/default_profile.png';
+    avatarFor(actorId) {
+      return this.actorAvatars[actorId] || '/default_profile.png';
+    },
+    async loadMore() {
+      if (this.loading || this.loadingMore || !this.nextCursor || this.nextCursor === 'end') return;
+      this.loadingMore = true;
+      try {
+        const resp = await warpnetService.getNotificationsPage(this.nextCursor);
+        const known = new Set(this.notifications.map(n => n.id));
+        const older = ((resp && resp.notifications) || []).filter(n => n && !known.has(n.id));
+        this.notifications = this.notifications.concat(older);
+        this.nextCursor = (resp && resp.cursor) || 'end';
+        this.hydrateAvatars(older);
+        this.hydrateTweets(older);
+      } catch (err) {
+        console.error('Failed to load more notifications:', err);
+        this.nextCursor = 'end';
+      } finally {
+        this.loadingMore = false;
+      }
+      this.fillPage();
+    },
+    // A filtered or short list can leave the page end in view, which the
+    // observer does not report again: keep loading until it scrolls away.
+    fillPage() {
+      this.$nextTick(() => {
+        const end = this.$refs.pageEnd;
+        const scroller = this.$refs.scroller;
+        if (!end || !scroller || !scroller.clientHeight) return;
+        if (end.getBoundingClientRect().top <= scroller.getBoundingClientRect().bottom) this.loadMore();
+      });
     },
     async hydrateAvatars(list) {
       // In-flight ids are skipped so the 2s notification poll can't pile
       // duplicate requests onto a hanging peer.
       const ids = [...new Set((list || [])
         .map(n => n && n.actor_id)
-        .filter(id => id && !this.actorAvatars[id] && !this.pendingAvatars.has(id)))];
+        .filter(id => id && !this.actorProfiles[id] && !this.pendingAvatars.has(id)))];
       await Promise.all(ids.map(async (id) => {
         this.pendingAvatars.add(id);
         try {
           const p = await warpnetService.getProfile(id);
+          if (p) this.actorProfiles[id] = { username: p.username || '', bio: p.bio || '' };
           if (p && p.avatar_key) {
             const img = await warpnetService.getImage({ userId: id, key: p.avatar_key });
             if (img) this.actorAvatars[id] = img;
@@ -350,6 +503,19 @@ export default {
           this.pendingAvatars.delete(id);
         }
       }));
+    },
+    // Every tweet a notification names is the viewer's own, so it loads
+    // from the local store.
+    hydrateTweets(list) {
+      (list || []).forEach((n) => {
+        const id = n && n.tweet_id;
+        if (!id || this.tweets[id] || this.pendingTweets.has(id)) return;
+        this.pendingTweets.add(id);
+        warpnetService.getTweet({ userId: n.user_id || this.ownerProfile.user_id, tweetId: id })
+          .then((t) => { if (t && t.id) this.tweets[id] = t; })
+          .catch(() => {})
+          .finally(() => this.pendingTweets.delete(id));
+      });
     },
     // Each request row fills in on its own; a hanging profile leaves its
     // placeholder in place without holding back the rest of the list.
@@ -410,8 +576,10 @@ export default {
         .catch((err) => console.warn('Failed to read own locked state:', err));
       const resp = await warpnetService.getNotifications(true);
       if (resp && resp.notifications) {
-        this.notifications = resp.notifications.filter((n) => n && n.type !== 'message');
+        this.notifications = resp.notifications.filter(Boolean);
+        this.nextCursor = resp.cursor || 'end';
         this.hydrateAvatars(this.notifications);
+        this.hydrateTweets(this.notifications);
       }
       warpnetService.markAllNotificationsRead().catch(() => {});
     } catch (err) {
@@ -419,41 +587,61 @@ export default {
     } finally {
       this.loading = false;
     }
+    this.fillPage();
 
     // Ride the service's 2s notification poll so new notifications show
     // up while the page is open, instead of only after a manual reload.
+    // The poll carries the first page only; older pages stay below it.
     // Items already marked read locally stay read even if a poll lands
     // before the mark-read request settles on the node.
     this._unsubscribeLive = warpnetService.subscribeNotifications((resp) => {
       if (this.loading) return;
-      const incoming = ((resp && resp.notifications) || []).filter((n) => n && n.type !== 'message');
+      const incoming = ((resp && resp.notifications) || []).filter(Boolean);
       if (incoming.length === 0) return;
       const readIds = new Set(
         this.notifications.filter((n) => n && n.is_read).map((n) => n.id)
       );
+      const incomingIds = new Set(incoming.map((n) => n.id));
       this.notifications = incoming.map((n) =>
-        n && readIds.has(n.id) ? { ...n, is_read: true } : n
-      );
+        readIds.has(n.id) ? { ...n, is_read: true } : n
+      ).concat(this.notifications.filter((n) => !incomingIds.has(n.id)));
       this.hydrateAvatars(this.notifications);
+      this.hydrateTweets(this.notifications);
     });
   },
   mounted() {
     this._onDocClick = (e) => {
-      if (!this.settingsOpen) return;
-      const menu = this.$refs.settingsMenu;
-      if (menu && !menu.contains(e.target)) {
+      if (this.settingsOpen && !this.$refs.settingsMenu?.contains(e.target)) {
         this.settingsOpen = false;
+      }
+      if (this.typeMenuOpen && !this.$refs.typeMenu?.contains(e.target)) {
+        this.typeMenuOpen = false;
       }
     };
     this._onDocKeyup = (e) => {
-      if (e.key === "Escape" && this.settingsOpen) {
+      if (e.key === "Escape") {
         this.settingsOpen = false;
+        this.typeMenuOpen = false;
       }
     };
+    if (typeof IntersectionObserver !== 'undefined') {
+      this._pageEndObserver = new IntersectionObserver((entries) => {
+        if (entries.some(e => e.isIntersecting)) this.loadMore();
+      }, { root: this.$refs.scroller });
+      // The page end leaves the DOM on the Requests tab.
+      this.$watch('mode', () => {
+        this._pageEndObserver.disconnect();
+        if (this.$refs.pageEnd) this._pageEndObserver.observe(this.$refs.pageEnd);
+      }, { immediate: true, flush: 'post' });
+    }
     document.addEventListener("click", this._onDocClick);
     window.addEventListener("keyup", this._onDocKeyup);
   },
   beforeUnmount() {
+    if (this._pageEndObserver) {
+      this._pageEndObserver.disconnect();
+      this._pageEndObserver = null;
+    }
     if (this._unsubscribeLive) {
       this._unsubscribeLive();
       this._unsubscribeLive = null;

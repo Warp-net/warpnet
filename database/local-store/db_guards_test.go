@@ -3,7 +3,10 @@ package local_store
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -140,4 +143,295 @@ func TestListSkipsFixedKeysUnderAScannedPrefix(t *testing.T) {
 		require.NotContains(t, item.Key, FixedKey, "fixed pointer rows are skipped by a scan")
 	}
 	require.Len(t, items, 1)
+}
+
+// A logout closes the store while paired devices keep sending requests: every
+// operation must finish, refused or not, instead of parking inside badger.
+func TestCloseUnderLoadLeavesNoOperationHanging(t *testing.T) {
+	const (
+		rounds  = 5
+		workers = 256
+	)
+	for round := range rounds {
+		db, err := New("", DefaultOptions().WithInMemory(true))
+		require.NoError(t, err)
+		require.NoError(t, db.Run("user", "password"))
+
+		var wg sync.WaitGroup
+		for worker := range workers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() { _ = recover() }() // badger panics on a txn caught by the close
+				key := DatabaseKey(fmt.Sprintf("/LOAD/%d", worker))
+				for {
+					if err := db.Set(key, []byte("v")); errors.Is(err, ErrNotRunning) {
+						return
+					}
+					txn, err := db.NewTxn()
+					if err != nil {
+						return
+					}
+					_, _ = txn.Get(key)
+					_ = txn.Set(key, []byte("w"))
+					_ = txn.Commit()
+					txn.Rollback()
+				}
+			}()
+		}
+
+		time.Sleep(20 * time.Millisecond)
+		db.Close()
+
+		finished := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(finished)
+		}()
+		select {
+		case <-finished:
+		case <-time.After(30 * time.Second):
+			t.Fatalf("round %d: operations hang after the store closed", round)
+		}
+	}
+}
+
+// More open transactions than badger's watermark channel holds: finishing them
+// on an already closed badger would block forever.
+func TestCloseLetsOpenTransactionsFinish(t *testing.T) {
+	db, err := New("", DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+
+	txns := make([]WarpTransactioner, 0, 256)
+	for range cap(txns) {
+		txn, err := db.NewTxn()
+		require.NoError(t, err)
+		txns = append(txns, txn)
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		db.Close()
+		close(closed)
+	}()
+	require.Eventually(t, db.IsClosed, 5*time.Second, time.Millisecond)
+
+	_, err = db.NewTxn()
+	require.ErrorIs(t, err, ErrNotRunning, "a closing store takes no new work")
+	_, err = db.Get(DatabaseKey("/LOAD/key"))
+	require.ErrorIs(t, err, ErrNotRunning, "and refuses reads made inside an open transaction")
+
+	finished := make(chan struct{})
+	go func() {
+		for _, txn := range txns {
+			txn.Rollback()
+		}
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(closeDrainTimeout + 10*time.Second):
+		t.Fatal("open transactions hang on the closing store")
+	}
+	<-closed
+}
+
+func TestCloseDoesNotWaitForeverForALeakedTransaction(t *testing.T) {
+	db, err := New("", DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+
+	leaked, err := db.NewTxn()
+	require.NoError(t, err)
+
+	closed := make(chan struct{})
+	go func() {
+		db.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(closeDrainTimeout + 10*time.Second):
+		t.Fatal("a leaked transaction blocks the close")
+	}
+	leaked.Rollback()
+}
+
+func TestCloseWithoutOpenTransactionsIsImmediate(t *testing.T) {
+	db := runningDB(t)
+	txn, err := db.NewTxn()
+	require.NoError(t, err)
+	require.NoError(t, txn.Set(DatabaseKey("/CLOSE/key"), []byte("v")))
+	require.NoError(t, txn.Commit())
+
+	start := time.Now()
+	db.Close()
+	require.Less(t, time.Since(start), closeDrainTimeout/2)
+}
+
+func TestFinishingATransactionTwiceCountsOnce(t *testing.T) {
+	db := runningDB(t)
+
+	committed, err := db.NewTxn()
+	require.NoError(t, err)
+	require.NoError(t, committed.Commit())
+	committed.Rollback()
+	require.NoError(t, committed.Discard())
+
+	read, err := db.NewReadTxn()
+	require.NoError(t, err)
+	read.Rollback()
+	read.Rollback()
+
+	require.Zero(t, db.openTxns.Load())
+
+	open, err := db.NewTxn()
+	require.NoError(t, err)
+	require.EqualValues(t, 1, db.openTxns.Load(), "an open transaction must stay visible to Close")
+	open.Rollback()
+}
+
+func TestCommitDuringCloseIsDurable(t *testing.T) {
+	db, err := New(t.TempDir(), DefaultOptions())
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+	key := DatabaseKey("/CLOSE/late")
+
+	txn, err := db.NewTxn()
+	require.NoError(t, err)
+	require.NoError(t, txn.Set(key, []byte("kept")))
+
+	closed := make(chan struct{})
+	go func() {
+		db.Close()
+		close(closed)
+	}()
+	require.Eventually(t, db.IsClosed, 5*time.Second, time.Millisecond)
+
+	require.NoError(t, txn.Commit())
+	<-closed
+
+	require.NoError(t, db.Run("user", "password"))
+	t.Cleanup(db.Close)
+	got, err := db.Get(key)
+	require.NoError(t, err)
+	require.Equal(t, []byte("kept"), got)
+}
+
+func TestSimultaneousClosesCloseOnce(t *testing.T) {
+	db, err := New("", DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+
+	var wg sync.WaitGroup
+	for range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			require.NotPanics(t, db.Close)
+		}()
+	}
+	wg.Wait()
+	require.True(t, db.IsClosed())
+}
+
+func TestStoreServesAgainAfterLogoutAndLogin(t *testing.T) {
+	db, err := New(t.TempDir(), DefaultOptions())
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+	t.Cleanup(db.Close)
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for worker := range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { _ = recover() }() // badger panics on a txn caught by the close
+			key := DatabaseKey(fmt.Sprintf("/RELOGIN/%d", worker))
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				txn, err := db.NewTxn()
+				if err != nil {
+					continue
+				}
+				_ = txn.Set(key, []byte("v"))
+				_ = txn.Commit()
+				txn.Rollback()
+			}
+		}()
+	}
+
+	for range 3 {
+		time.Sleep(10 * time.Millisecond)
+		db.Close()
+		require.NoError(t, db.Run("user", "password"))
+	}
+	close(stop)
+
+	finished := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(30 * time.Second):
+		t.Fatal("operations hang across a logout and login")
+	}
+
+	key := DatabaseKey("/RELOGIN/after")
+	require.NoError(t, db.Set(key, []byte("v")))
+	got, err := db.Get(key)
+	require.NoError(t, err)
+	require.Equal(t, []byte("v"), got)
+}
+
+func TestMaintenanceCallsSurviveAClose(t *testing.T) {
+	db, err := New(t.TempDir(), DefaultOptions())
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for !db.IsClosed() {
+				_ = db.Sync()
+				_, _ = db.NextSequence()
+				_ = db.InnerDB()
+			}
+		}()
+	}
+	time.Sleep(20 * time.Millisecond)
+	db.Close()
+	wg.Wait()
+
+	require.ErrorIs(t, db.Sync(), ErrNotRunning)
+	require.Empty(t, db.Stats())
+	require.NotPanics(t, db.GC)
+}
+
+func TestLoginAfterLogoutWhileCollecting(t *testing.T) {
+	db, err := New(t.TempDir(), DefaultOptions().
+		WithIntervalGC(time.Millisecond).
+		WithSleepGC(time.Hour).
+		WithDiscardRatioGC(0.5))
+	require.NoError(t, err)
+
+	for range 20 {
+		require.NoError(t, db.Run("user", "password"))
+		require.NoError(t, db.Set(DatabaseKey("/GC/key"), make([]byte, 2048)))
+		time.Sleep(5 * time.Millisecond)
+
+		start := time.Now()
+		db.Close()
+		require.Less(t, time.Since(start), time.Minute, "the close must not sit out the collector's pause")
+	}
 }

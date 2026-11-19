@@ -71,7 +71,7 @@ type stubNodeAddresser struct {
 func (s stubNodeAddresser) Addrs() []warpnet.WarpAddress { return s.addrs }
 
 // stubPairConn embeds network.Conn so only the methods the handler calls
-// (LocalPeer/RemotePeer) need to be implemented.
+// (LocalPeer/RemotePeer/RemoteMultiaddr) need to be implemented.
 type stubPairConn struct {
 	network.Conn
 	localPeerID  peer.ID
@@ -80,6 +80,9 @@ type stubPairConn struct {
 
 func (c stubPairConn) LocalPeer() peer.ID  { return c.localPeerID }
 func (c stubPairConn) RemotePeer() peer.ID { return c.remotePeerID }
+func (c stubPairConn) RemoteMultiaddr() ma.Multiaddr {
+	return ma.StringCast("/ip4/127.0.0.1/tcp/4001")
+}
 
 // stubPairStream embeds network.Stream so only Conn() needs implementing.
 type stubPairStream struct {

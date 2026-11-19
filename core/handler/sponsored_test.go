@@ -329,7 +329,7 @@ func reopenedOrder(t *testing.T, w *stubSponsoredWallet) stubOrders {
 	t.Helper()
 	orders := stubOrders{}
 	buyer := StreamNewOrderHandler(
-		stubAuth{owner: domain.Owner{UserId: "buyer-1", Username: "bob"}}, testIdentityKey(t), w, orders,
+		stubAuth{owner: domain.Owner{UserId: "buyer-1", Login: "bob"}}, testIdentityKey(t), w, orders,
 		stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}, &answeringAuthor{t: t, reply: authorAddressReply},
 	)
 	_, err := buyer(marshal(t, event.NewOrderEvent{TweetId: "tweet-1", UserId: "author-1", Amount: "1500000"}), nil)
@@ -342,7 +342,7 @@ func reopenedOrder(t *testing.T, w *stubSponsoredWallet) stubOrders {
 }
 
 func TestStreamNewOrderHandler(t *testing.T) {
-	owner := domain.Owner{UserId: "buyer-1", Username: "bob"}
+	owner := domain.Owner{UserId: "buyer-1", Login: "bob"}
 	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}
 	confirm := func(ev event.VerifyOrderEvent) ([]byte, error) {
 		return json.Marshal(event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId, Confirmed: true})
@@ -722,7 +722,7 @@ func TestStreamNewOrderHandler(t *testing.T) {
 // moment later with another. The order is held to the amount the buyer's client
 // sends, the price the buyer saw.
 func TestOrderIsHeldToTheAmountTheBuyerSaw(t *testing.T) {
-	owner := domain.Owner{UserId: "buyer-1", Username: "bob"}
+	owner := domain.Owner{UserId: "buyer-1", Login: "bob"}
 	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}
 	order := func(t *testing.T, w *stubSponsoredWallet, asked int64) error {
 		t.Helper()
@@ -761,7 +761,7 @@ func TestOrderIsHeldToTheAmountTheBuyerSaw(t *testing.T) {
 }
 
 func TestStreamGetOrderQuoteHandler(t *testing.T) {
-	owner := domain.Owner{UserId: "buyer-1", Username: "bob"}
+	owner := domain.Owner{UserId: "buyer-1", Login: "bob"}
 	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}
 	newHandler := func(w SponsoredWallet, streamer SponsoredStreamer) warpnet.WarpHandlerFunc {
 		return StreamGetOrderQuoteHandler(stubAuth{owner: owner}, testIdentityKey(t), w, users, streamer)
@@ -820,7 +820,7 @@ func TestStreamGetOrderQuoteHandler(t *testing.T) {
 }
 
 func TestStreamVerifyOrderHandler(t *testing.T) {
-	owner := domain.Owner{UserId: "author-1", Username: "alice"}
+	owner := domain.Owner{UserId: "author-1", Login: "alice"}
 	buyerNode := newTestPeerID(t)
 	users := stubSponsoredUsers{"buyer-1": {Id: "buyer-1", NodeId: buyerNode.String()}}
 	paidTweet := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {

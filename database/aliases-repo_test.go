@@ -30,6 +30,7 @@ package database
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -155,6 +156,183 @@ func (s *AliasesRepoTestSuite) TestSetAlias_LimitReached() {
 	ids, err := s.repo.GetNodeIDs()
 	s.Require().NoError(err)
 	assert.Len(s.T(), ids, MaxAliases)
+}
+
+func TestSetAlias_SimultaneousPairingKeepsTheLimit(t *testing.T) {
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	assert.NoError(t, err)
+	defer db.Close()
+	assert.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
+	repo := NewAliasesRepo(db)
+
+	const devices = MaxAliases * 3
+	errs := make([]error, devices)
+	var wg sync.WaitGroup
+	for i := range devices {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("device-%03d", i), Token: "tok"})
+		}()
+	}
+	wg.Wait()
+
+	paired := 0
+	for _, err := range errs {
+		if err == nil {
+			paired++
+			continue
+		}
+		assert.ErrorIs(t, err, ErrTooManyAliases)
+	}
+	assert.Equal(t, MaxAliases, paired)
+
+	ids, err := repo.GetNodeIDs()
+	assert.NoError(t, err)
+	assert.Len(t, ids, MaxAliases)
+}
+
+func TestAliases_TombstonesNeverHideLiveDevices(t *testing.T) {
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	assert.NoError(t, err)
+	defer db.Close()
+	assert.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
+	repo := NewAliasesRepo(db)
+
+	const revoked = aliasPageSize*2 + 5
+	for i := range revoked {
+		nodeId := fmt.Sprintf("a-revoked-%03d", i)
+		assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: nodeId, Token: "tok"}))
+		assert.NoError(t, repo.DeleteAlias(nodeId))
+	}
+
+	// Live ids sort after every tombstone, past the first pages of the scan.
+	for i := range MaxAliases {
+		assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("z-live-%03d", i), Token: "tok"}))
+	}
+	ids, err := repo.GetNodeIDs()
+	assert.NoError(t, err)
+	assert.Len(t, ids, MaxAliases, "every paired device must stay authorized")
+
+	assert.ErrorIs(t, repo.SetAlias(domain.Alias{NodeId: "z-live-extra", Token: "tok"}), ErrTooManyAliases)
+	assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: "z-live-000", Token: "tok"}), "a refresh takes no new slot")
+	assert.NoError(t, repo.DeleteAlias("z-live-009"), "a device past the first pages can be revoked")
+	assert.ErrorIs(t, repo.SetAlias(domain.Alias{NodeId: "z-live-009", Token: "tok"}), ErrAliasRevoked)
+}
+
+func TestGetAliases_RecordsFillingWholePages(t *testing.T) {
+	for _, total := range []int{aliasPageSize, aliasPageSize * 2} {
+		db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+		assert.NoError(t, err)
+		assert.NoError(t, db.Run("test", "test"))
+		repo := NewAliasesRepo(db)
+
+		const live = 3
+		for i := range total - live {
+			nodeId := fmt.Sprintf("a-revoked-%03d", i)
+			assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: nodeId, Token: "tok"}))
+			assert.NoError(t, repo.DeleteAlias(nodeId))
+		}
+		for i := range live {
+			assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("z-live-%d", i), Token: "tok"}))
+		}
+
+		ids, err := repo.GetNodeIDs()
+		assert.NoError(t, err)
+		assert.Len(t, ids, live, "%d records", total)
+		db.Close()
+	}
+}
+
+func (s *AliasesRepoTestSuite) TestSetAlias_RefreshAtTheLimitTakesNoSlot() {
+	for i := range MaxAliases {
+		s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("device-%d", i), Token: "tok"}))
+	}
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: "device-0", Token: "tok"}))
+
+	ids, err := s.repo.GetNodeIDs()
+	s.Require().NoError(err)
+	assert.Len(s.T(), ids, MaxAliases)
+}
+
+func (s *AliasesRepoTestSuite) TestSetAlias_PairedBackDeviceNeedsAFreeSlot() {
+	for i := range MaxAliases {
+		s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("device-%d", i), Token: "tok"}))
+	}
+	s.Require().NoError(s.repo.DeleteAlias("device-0"))
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: "newcomer", Token: "tok"}))
+
+	err := s.repo.SetAlias(domain.Alias{NodeId: "device-0", Token: "fresh-token"})
+	assert.ErrorIs(s.T(), err, ErrTooManyAliases, "a revoked device holds no slot")
+
+	s.Require().NoError(s.repo.DeleteAlias("newcomer"))
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: "device-0", Token: "fresh-token"}))
+}
+
+func (s *AliasesRepoTestSuite) TestSetAlias_PairedBackDeviceGetsAFreshRecord() {
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: "device", Token: "old"}))
+	s.Require().NoError(s.repo.DeleteAlias("device"))
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: "device", Token: "new"}))
+
+	aliases, err := s.repo.GetAliases()
+	s.Require().NoError(err)
+	s.Require().Len(aliases, 1)
+	assert.False(s.T(), aliases[0].IsRevoked())
+	assert.Equal(s.T(), "new", aliases[0].Token)
+}
+
+func (s *AliasesRepoTestSuite) TestAliases_SimultaneousRefreshesKeepOneRecord() {
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: "device", Token: "tok"}))
+	first, err := s.repo.GetAliases()
+	s.Require().NoError(err)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 32)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = s.repo.SetAlias(domain.Alias{NodeId: "device", Token: "tok"})
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		assert.NoError(s.T(), err)
+	}
+	aliases, err := s.repo.GetAliases()
+	s.Require().NoError(err)
+	s.Require().Len(aliases, 1)
+	assert.Equal(s.T(), first[0].ID, aliases[0].ID)
+	assert.True(s.T(), first[0].CreatedAt.Equal(aliases[0].CreatedAt))
+}
+
+func (s *AliasesRepoTestSuite) TestAliases_SimultaneousPairAndRevokeKeepTheLimit() {
+	for i := range MaxAliases {
+		s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("device-%d", i), Token: "tok"}))
+	}
+
+	var wg sync.WaitGroup
+	for i := range MaxAliases {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			assert.NoError(s.T(), s.repo.DeleteAlias(fmt.Sprintf("device-%d", i)))
+		}()
+		go func() {
+			defer wg.Done()
+			err := s.repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("newcomer-%d", i), Token: "tok"})
+			if err != nil {
+				assert.ErrorIs(s.T(), err, ErrTooManyAliases)
+			}
+		}()
+	}
+	wg.Wait()
+
+	ids, err := s.repo.GetNodeIDs()
+	s.Require().NoError(err)
+	assert.LessOrEqual(s.T(), len(ids), MaxAliases)
 }
 
 func (s *AliasesRepoTestSuite) TestSetAlias_EmptyNodeId() {

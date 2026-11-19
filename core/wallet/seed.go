@@ -37,13 +37,13 @@ import (
 )
 
 func DeriveSeed(owner domain.Owner, identityKey ed25519.PrivateKey, network string) (string, error) {
-	if owner.Username == "" {
+	if owner.Login == "" {
 		return "", warpnet.WarpError("wallet: no owner in session")
 	}
 	if len(identityKey) == 0 {
 		return "", warpnet.WarpError("wallet: no identity key in session")
 	}
-	raw := security.DeriveWalletSeed(identityKey, network, owner.Username)
+	raw := security.DeriveWalletSeed(identityKey, network, owner.Login)
 	defer security.Wipe(raw)
 	return hex.EncodeToString(raw), nil
 }
