@@ -1,0 +1,76 @@
+name: Tests / Build Warpfone
+
+on:
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Warpnet.xcframework
+        env:
+          WARPFONE_XCFRAMEWORK_TARGETS: iossimulator
+        run: |
+          set -o pipefail
+          warpfone/scripts/build-xcframework.sh 2>&1 | tee warpfone/build.log
+
+      - name: Build the app
+        run: |
+          set -o pipefail
+          cp warpfone/WarpnetApp.xcconfig.template warpfone/WarpnetApp.xcconfig
+          xcodebuild build \
+            -project warpfone/WarpnetApp.xcodeproj \
+            -scheme WarpnetApp \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a warpfone/build.log
+
+      - name: Post build failure as PR comment
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const tail = (p, bytes = 60000) => {
+              if (!fs.existsSync(p)) return `(no ${p} produced)`;
+              const stat = fs.statSync(p);
+              const start = Math.max(0, stat.size - bytes);
+              const fd = fs.openSync(p, 'r');
+              const buf = Buffer.alloc(stat.size - start);
+              fs.readSync(fd, buf, 0, buf.length, start);
+              fs.closeSync(fd);
+              return buf.toString('utf8');
+            };
+            const buildLog = tail(path.join('warpfone', 'build.log'));
+            const body = [
+              `## Warpfone CI build failure (\`${context.sha.substring(0, 7)}\`)`,
+              '',
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '<details><summary><code>xcodebuild build</code> (last 60 KB)</summary>',
+              '',
+              '```',
+              buildLog,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
