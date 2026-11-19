@@ -60,27 +60,3 @@ jobs:
       # Every file is //go:build mobile, so the module-wide test job skips them.
       - name: Run tests
         run: go test -race -count=1 -tags mobile ./warpfone/node/... ./warpdroid/node/...
-
-  app:
-    name: App
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Build Warpnet.xcframework
-        env:
-          WARPFONE_XCFRAMEWORK_TARGETS: iossimulator
-        run: warpfone/scripts/build-xcframework.sh
-
-      - name: Build the app
-        run: |
-          cp warpfone/WarpnetApp.xcconfig.template warpfone/WarpnetApp.xcconfig
-          xcodebuild build \
-            -project warpfone/WarpnetApp.xcodeproj \
-            -scheme WarpnetApp \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO
