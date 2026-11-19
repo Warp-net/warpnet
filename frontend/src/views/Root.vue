@@ -382,6 +382,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
 import {isPasswordStrong} from "@/lib/password";
+import {queueOnboarding} from "@/lib/onboarding";
 export default {
   name: "Root",
   components: {
@@ -492,6 +493,7 @@ export default {
           }
         }
         this.setStep("");
+        queueOnboarding();
         // No Vue route by id — route via Search (same as SearchBar).
         const deepLink = parseDeepLink(await warpnetService.consumePendingDeepLink());
         if (deepLink && deepLink.kind === "user") {
