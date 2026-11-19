@@ -927,6 +927,18 @@ export const warpnetService = {
             && ((owner && tw.user_id === owner.user_id) || !hidden(tw.text)));
     },
 
+    // An older page for the list's own scrolling; unlike getNotifications it
+    // leaves the shared cursor and the badge state alone.
+    async getNotificationsPage(cursor) {
+        return await this.sendToNode({
+            path: PRIVATE_GET_NOTIFICATIONS,
+            body: {
+                limit: defaultLimit,
+                cursor: cursor,
+            },
+        });
+    },
+
     async getNotifications(cursorReset) {
         let cursor = this.getCursor('notifications')
         if (cursorReset) {

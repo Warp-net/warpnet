@@ -448,6 +448,13 @@
     <string name="notification_channel_admin_description">Admin notifications, like new reports or signups</string>
 
     <string name="notification_mention_format">%1$s mentioned you</string>
+    <plurals name="notification_and_others">
+        <item quantity="one">" and %1$d other"</item>
+        <item quantity="other">" and %1$d others"</item>
+    </plurals>
+    <string name="notification_reply_name">Replies</string>
+    <string name="notification_order_limit_name">Order limits</string>
+    <string name="notification_type_filter">Notification type</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s and %4$d others</string>
     <string name="notification_summary_medium">%1$s, %2$s, and %3$s</string>
     <string name="notification_summary_small">%1$s and %2$s</string>

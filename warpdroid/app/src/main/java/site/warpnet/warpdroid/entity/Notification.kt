@@ -19,6 +19,7 @@ import androidx.compose.runtime.Immutable
 import site.warpnet.warpdroid.entity.Notification.Type
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
+import java.util.Date
 
 @Immutable
 @JsonClass(generateAdapter = true)
@@ -32,6 +33,8 @@ data class Notification(
     @Json(name = "moderation_warning") val moderationWarning: AccountWarning? = null,
     val emoji: String? = null,
     @Json(name = "emoji_url") val emojiUrl: String? = null,
+    @Json(name = "created_at") val createdAt: Date? = null,
+    val text: String = "",
 ) {
 
     @JsonClass(generateAdapter = false)

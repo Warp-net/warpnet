@@ -7,6 +7,9 @@ vi.mock('@/service/service', () => ({
     getNotifications: vi.fn(),
     getProfile: vi.fn(),
     getImage: vi.fn(),
+    getTweet: vi.fn(),
+    getNotificationsPage: vi.fn(),
+    createChat: vi.fn(),
     getFollowRequests: vi.fn(),
     markNotificationRead: vi.fn(),
     markAllNotificationsRead: vi.fn(),
@@ -56,6 +59,7 @@ beforeEach(() => {
   });
   warpnetService.getProfile.mockResolvedValue({ user_id: 'alice', locked: false });
   warpnetService.getImage.mockResolvedValue(null);
+  warpnetService.getTweet.mockResolvedValue(null);
   warpnetService.getFollowRequests.mockResolvedValue({ follower_ids: [] });
   warpnetService.markNotificationRead.mockResolvedValue({});
   warpnetService.markAllNotificationsRead.mockResolvedValue({});
@@ -127,7 +131,7 @@ describe('Notifications.vue', () => {
     renderNotifications();
 
     const row = await screen.findByText(/leaker bought 10 of your tweets within an hour/);
-    expect(row.closest('button').querySelector('.fa-pepper-hot')).not.toBeNull();
+    expect(row.closest('[role="button"]').querySelector('.fa-pepper-hot')).not.toBeNull();
   });
 
   it('opens the tweet when a reaction notification is clicked', async () => {
@@ -154,6 +158,130 @@ describe('Notifications.vue', () => {
       params: { id: 't1' },
       query: { u: 'alice' },
     });
+  });
+
+  it('shows the actor and the tweet the action was taken on, each opening its own page', async () => {
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 1,
+      notifications: [
+        {
+          id: 'n1',
+          type: 'reaction',
+          user_id: 'alice',
+          actor_id: 'bob',
+          tweet_id: 't1',
+          text: 'bob reacted your tweet',
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    warpnetService.getProfile.mockImplementation((id) =>
+      Promise.resolve(id === 'bob' ? { id: 'bob', username: 'bob' } : { user_id: id, locked: false })
+    );
+    warpnetService.getTweet.mockResolvedValue({ id: 't1', user_id: 'alice', text: 'my first tweet' });
+
+    renderNotifications();
+
+    const tweet = await screen.findByText('my first tweet');
+    expect(warpnetService.getTweet).toHaveBeenCalledWith({ userId: 'alice', tweetId: 't1' });
+    await fireEvent.click(tweet);
+    expect(routerPush).toHaveBeenLastCalledWith({
+      name: 'Tweet',
+      params: { id: 't1' },
+      query: { u: 'alice' },
+    });
+
+    await fireEvent.click(screen.getByText('bob', { selector: 'button' }));
+    expect(routerPush).toHaveBeenLastCalledWith({ name: 'Profile', params: { id: 'bob' } });
+    expect(screen.getByText(/reacted your tweet/)).toBeInTheDocument();
+  });
+
+  it('groups reactions to one tweet into a row naming the others', async () => {
+    const at = new Date().toISOString();
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 2,
+      notifications: [
+        { id: 'n2', type: 'reaction', user_id: 'alice', actor_id: 'carol', tweet_id: 't1', text: 'carol reacted your tweet', created_at: at },
+        { id: 'n1', type: 'reaction', user_id: 'alice', actor_id: 'bob', tweet_id: 't1', text: 'bob reacted your tweet', created_at: at },
+      ],
+    });
+    warpnetService.getProfile.mockImplementation((id) =>
+      Promise.resolve(id === 'alice' ? { user_id: 'alice', locked: false } : { id, username: id })
+    );
+
+    renderNotifications();
+
+    expect(await screen.findByText(/and 1 other reacted your tweet/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'bob' })).toHaveLength(1);
+    expect(screen.getAllByText('carol', { selector: 'button' })).toHaveLength(1);
+  });
+
+  it('opens the chat with the sender of a message notification', async () => {
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 1,
+      notifications: [
+        { id: 'n1', type: 'message', user_id: 'alice', actor_id: 'bob', text: 'bob sent you a message', created_at: new Date().toISOString() },
+      ],
+    });
+    warpnetService.createChat.mockResolvedValue({ id: 'chat1' });
+
+    renderNotifications();
+    await fireEvent.click(await screen.findByText('bob sent you a message'));
+
+    await waitFor(() => {
+      expect(routerPush).toHaveBeenCalledWith({ name: 'Messages', params: { id: 'alice', chatId: 'chat1' } });
+    });
+    expect(warpnetService.createChat).toHaveBeenCalledWith('bob');
+  });
+
+  it('narrows the list to one notification type from the title menu', async () => {
+    const at = new Date().toISOString();
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 2,
+      notifications: [
+        { id: 'n2', type: 'follow', user_id: 'alice', actor_id: 'carol', text: 'carol started following you', created_at: at },
+        { id: 'n1', type: 'reaction', user_id: 'alice', actor_id: 'bob', tweet_id: 't1', text: 'bob reacted your tweet', created_at: at },
+      ],
+    });
+
+    renderNotifications();
+    await screen.findByText('bob reacted your tweet');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Notification type' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Follows' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('bob reacted your tweet')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('carol started following you')).toBeInTheDocument();
+  });
+
+  it('loads the next page when the end of the list comes into view', async () => {
+    const observers = [];
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(cb) { this.cb = cb; observers.push(this); }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    const at = new Date().toISOString();
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 0,
+      cursor: 'c1',
+      notifications: [{ id: 'n2', type: 'follow', user_id: 'alice', actor_id: 'carol', text: 'carol started following you', created_at: at }],
+    });
+    warpnetService.getNotificationsPage.mockResolvedValueOnce({
+      cursor: 'end',
+      notifications: [{ id: 'n1', type: 'moderation', user_id: 'alice', text: 'your report was reviewed', created_at: at }],
+    });
+
+    renderNotifications();
+    await screen.findByText('carol started following you');
+    observers.forEach(o => o.cb([{ isIntersecting: true }]));
+
+    expect(await screen.findByText('your report was reviewed')).toBeInTheDocument();
+    expect(warpnetService.getNotificationsPage).toHaveBeenCalledWith('c1');
+    vi.unstubAllGlobals();
   });
 
   it('opens the follower profile when a follow notification is clicked', async () => {

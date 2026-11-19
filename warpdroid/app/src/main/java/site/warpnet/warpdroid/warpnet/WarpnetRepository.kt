@@ -22,6 +22,7 @@ import com.squareup.moshi.adapter
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import site.warpnet.transport.ProtocolIds
 import site.warpnet.transport.WarpnetClient
@@ -717,13 +718,28 @@ class WarpnetRepository @Inject constructor(
      * the existing call sites in [site.warpnet.warpdroid.network.WarpnetApi]
      * compiling and to surface the resolved-from-pairing identity to callers.
      */
-    suspend fun getNotifications(userId: String, cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {
+    suspend fun getNotifications(userId: String, cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> = coroutineScope {
         val raw = client.request(
             ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
             getNotifsAdapter.toJson(GetNotificationsEvent(cursor = cursor, limit = limit)),
         )
-        val page = notificationsRespAdapter.fromJson(raw) ?: return emptyList<Notification>() to ""
-        return page.notifications.map { it.toNotification() } to page.cursor
+        val page = notificationsRespAdapter.fromJson(raw) ?: return@coroutineScope emptyList<Notification>() to ""
+        val user: suspend (String) -> WarpnetUser? = { id ->
+            userCache.getOrLoad(id) { runCatching { getUser(id) }.getOrNull() }
+        }
+        // Name who acted and the tweet they acted on. Every tweet a
+        // notification names is the viewer's own.
+        page.notifications.map { wire ->
+            async {
+                val base = wire.toNotification()
+                val actor = wire.actorId?.takeIf { it.isNotBlank() }?.let { user(it) }
+                val status = wire.tweetId?.takeIf { it.isNotBlank() }?.let { id ->
+                    runCatching { fetchTweetRaw(id, userId) }.getOrNull()
+                        ?.let { it.toTweet(author = user(it.userId)) }
+                }
+                base.copy(account = actor?.toTimelineUser() ?: base.account, status = status)
+            }
+        }.awaitAll() to page.cursor
     }
 
     suspend fun getPushes(cursor: String = "", limit: Int = 40): Pair<List<Notification>, String> {

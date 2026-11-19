@@ -269,7 +269,7 @@ describe('Settings/Rating.vue recent offences', () => {
         dim('net', {
           score: 612,
           tier: 'watched',
-          recent: [offence('rate_limit_hit', 12), offence('bad_signature', 3), offence('dial_failure', 1)],
+          recent: [offence('rate_limit_hit', 12), offence('bad_signature', 3), offence('connection_flap', 1)],
         }),
         dim('app', { score: 940, recent: [offence('write_flood', 2)] }),
       ],
@@ -280,7 +280,7 @@ describe('Settings/Rating.vue recent offences', () => {
     expect(offences(net)).toEqual([
       ['Requests over the rate limit', '12×'],
       ['Messages with an invalid signature', '3×'],
-      ['Failed connection attempts', '1×'],
+      ['Repeated reconnections', '1×'],
     ]);
     expect(offences(dimensionBlock('Application'))).toEqual([['Excessive posting', '2×']]);
   });

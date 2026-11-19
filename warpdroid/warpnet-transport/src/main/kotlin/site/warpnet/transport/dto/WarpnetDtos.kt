@@ -89,6 +89,8 @@ data class WarpnetNotification(
     val type: String,
     val text: String = "",
     @Json(name = "user_id") val userId: String = "",
+    @Json(name = "actor_id") val actorId: String? = null,
+    @Json(name = "tweet_id") val tweetId: String? = null,
     @Json(name = "is_read") val isRead: Boolean = false,
 )
 
