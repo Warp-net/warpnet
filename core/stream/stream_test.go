@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -498,8 +498,8 @@ func TestHashBody_IsStableAndDiscriminating(t *testing.T) {
 func TestStreamPool_GatewayGetsTheBridgeKey(t *testing.T) {
 	client := newStreamHost(t)
 	gateway := newStreamHost(t)
-	original := fediverse.GatewayNodeID()
-	fediverse.SetGatewayNodeID(gateway.ID().String())
+	original := bridge.GatewayNodeID()
+	bridge.SetGatewayNodeID(gateway.ID().String())
 	t.Cleanup(restoreGateway(original))
 
 	received := echoServer(t, gateway, []byte(`{}`))
@@ -521,4 +521,4 @@ func restoreGateway(id string) func() {
 
 type gatewayRestorer struct{ id string }
 
-func (g gatewayRestorer) restore() { fediverse.SetGatewayNodeID(g.id) }
+func (g gatewayRestorer) restore() { bridge.SetGatewayNodeID(g.id) }

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -417,7 +417,7 @@ func TestRemovePeerBlocklist(t *testing.T) {
 
 func TestBlockingABridgedUserLeavesTheGatewayConnected(t *testing.T) {
 	users := stubBlockUserResolver{getFn: func(id string) (domain.User, error) {
-		return domain.User{Id: id, NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork}, nil
+		return domain.User{Id: id, NodeId: bridge.GatewayNodeID(), Network: bridge.MastodonNetwork}, nil
 	}}
 	peerBl := &stubPeerBlocklister{}
 

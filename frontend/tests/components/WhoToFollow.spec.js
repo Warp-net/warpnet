@@ -80,6 +80,21 @@ describe('WhoToFollow.vue (sidebar)', () => {
     expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(1, true, 10);
   });
 
+  it('gives a network the client does not know its own tab', async () => {
+    const other = { id: 'npub1abc@nostr.com', username: 'other1', network: 'nostr' };
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce([warpnetUser(1), other])
+      .mockResolvedValueOnce([]);
+
+    renderComponent();
+
+    expect(await screen.findByText('warp1')).toBeInTheDocument();
+    expect(screen.queryByText('other1')).not.toBeInTheDocument(); // not under Warpnet
+    await openTab('Nostr');
+    expect(await screen.findByText('other1')).toBeInTheDocument();
+    expect(screen.queryByText('warp1')).not.toBeInTheDocument();
+  });
+
   it('keeps paging until each tab is filled, capping each at 5', async () => {
     warpnetService.getWhoToFollow
       .mockResolvedValueOnce([1, 2, 3, 4, 5, 6].map(warpnetUser))

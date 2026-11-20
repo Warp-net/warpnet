@@ -34,7 +34,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -96,8 +96,8 @@ func TestStreamLimiterGivesTheGatewayItsOwnBudget(t *testing.T) {
 	limiter := NewStreamLimiter(Settings{}, nil)
 	t.Cleanup(limiter.Close)
 
-	gatewayPeer := warpnet.FromStringToPeerID(fediverse.GatewayNodeID())
-	require.NotEmpty(t, gatewayPeer, "fediverse.GatewayNodeID() must be a valid peer id")
+	gatewayPeer := warpnet.FromStringToPeerID(bridge.GatewayNodeID())
+	require.NotEmpty(t, gatewayPeer, "bridge.GatewayNodeID() must be a valid peer id")
 
 	for _, route := range []string{
 		event.PUBLIC_GET_USER, event.PUBLIC_GET_IMAGE, event.PUBLIC_POST_REACT, event.PRIVATE_POST_PAIR,

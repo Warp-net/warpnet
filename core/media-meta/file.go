@@ -33,7 +33,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/security"
@@ -91,7 +91,7 @@ func verifyForeignMedia(
 }
 
 func isForeignOriginMedia(u domain.User) bool {
-	return u.Network == fediverse.MastodonNetwork || u.NodeId == fediverse.GatewayNodeID()
+	return u.Network == bridge.MastodonNetwork || u.NodeId == bridge.GatewayNodeID()
 }
 
 func isContentKey(key string) bool {

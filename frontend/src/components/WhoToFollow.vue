@@ -97,7 +97,7 @@ resulting from the use or misuse of this software.
 <script>
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {bridgedNetwork, NETWORK_MASTODON, NETWORK_THREADS} from "@/lib/network";
+import {networkSections, sectionKey} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 
@@ -110,9 +110,7 @@ export default {
   data() {
     return {
       activeTab: 'warpnet',
-      warpnetProfiles: [],
-      mastodonProfiles: [],
-      threadsProfiles: [],
+      groups: {warpnet: [], mastodon: [], threads: []},
       followingStatus: new Map(),
       pending: new Set(),
     };
@@ -121,11 +119,7 @@ export default {
     // Every tab is always offered, empty or not: a tab that appears only once
     // it has content hides the fact that the other networks exist at all.
     tabs() {
-      return [
-        {key: 'warpnet', label: 'Warpnet', network: ''},
-        {key: 'mastodon', label: 'Mastodon', network: NETWORK_MASTODON},
-        {key: 'threads', label: 'Threads', network: NETWORK_THREADS},
-      ];
+      return networkSections(Object.values(this.groups).flat());
     },
     activeProfiles() {
       return this.groupOf(this.activeTab);
@@ -140,15 +134,14 @@ export default {
         }
       });
     },
-    // groupOf / groupFor keep the three buckets in one place: the tab key on
-    // one side, the network tag a profile carries on the other.
+    // groupOf / groupFor keep one bucket per network: the tab key on one
+    // side, the network tag a profile carries on the other.
     groupOf(key) {
-      if (key === 'mastodon') return this.mastodonProfiles;
-      if (key === 'threads') return this.threadsProfiles;
-      return this.warpnetProfiles;
+      if (!this.groups[key]) this.groups[key] = [];
+      return this.groups[key];
     },
     groupFor(profile) {
-      return this.groupOf(bridgedNetwork(profile) || 'warpnet');
+      return this.groupOf(sectionKey(profile));
     },
     isFollowing(profileId) {
       return this.followingStatus.get(profileId) || false
@@ -220,13 +213,11 @@ export default {
           group.push(p);
         }
       }
-      if (this.warpnetProfiles.length >= sectionLimit
-          && this.mastodonProfiles.length >= sectionLimit
-          && this.threadsProfiles.length >= sectionLimit) {
+      if (Object.values(this.groups).every((g) => g.length >= sectionLimit)) {
         break;
       }
     }
-    const profiles = [...this.warpnetProfiles, ...this.mastodonProfiles, ...this.threadsProfiles];
+    const profiles = Object.values(this.groups).flat();
     this.loadAvatars(profiles);
     for (const p of profiles) {
       const status = await warpnetService.isFollowing(p.id);

@@ -33,7 +33,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -121,7 +121,7 @@ func StreamGetGatewaySettingsHandler(
 			return nil, err
 		}
 		if settings.NodeID == "" {
-			settings.NodeID = fediverse.DefaultGatewayNodeID
+			settings.NodeID = bridge.DefaultGatewayNodeID
 		}
 		return event.GetGatewaySettingsResponse(settings), nil
 	}
@@ -136,7 +136,7 @@ func StreamUpdateGatewaySettingsHandler(
 			return nil, err
 		}
 		if ev.NodeID == "" {
-			ev.NodeID = fediverse.DefaultGatewayNodeID
+			ev.NodeID = bridge.DefaultGatewayNodeID
 		}
 		if err := repo.SetGatewaySettings(ev); err != nil {
 			return nil, err

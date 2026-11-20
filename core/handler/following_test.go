@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -374,7 +374,7 @@ func TestStreamFollowHandler(t *testing.T) {
 	t.Run("I follow a bridged user - no gossip topic", func(t *testing.T) {
 		acceptedResp, _ := json.Marshal(event.Accepted)
 		bridged := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{Id: userId, NodeId: "gateway-node", Network: fediverse.MastodonNetwork}, nil
+			return domain.User{Id: userId, NodeId: "gateway-node", Network: bridge.MastodonNetwork}, nil
 		}}
 		h := StreamFollowHandler(stubFollowBroadcaster{subscribeFn: func(userId string) error {
 			t.Fatal("bridged user must not get a gossip topic")
@@ -678,7 +678,7 @@ func TestStreamUnfollowHandler(t *testing.T) {
 	t.Run("I unfollow a bridged user - no gossip topic", func(t *testing.T) {
 		acceptedResp, _ := json.Marshal(event.Accepted)
 		bridged := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{Id: userId, NodeId: "gateway-node", Network: fediverse.ThreadsNetwork}, nil
+			return domain.User{Id: userId, NodeId: "gateway-node", Network: bridge.ThreadsNetwork}, nil
 		}}
 		h := StreamUnfollowHandler(stubFollowBroadcaster{unsubscribeFn: func(userId string) error {
 			t.Fatal("bridged user has no gossip topic to leave")

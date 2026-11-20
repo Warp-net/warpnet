@@ -81,7 +81,7 @@ import SearchBar from "../components/SearchBar.vue";
 import Users from "../components/Users.vue";
 import Loader from "../components/Loader.vue";
 import {warpnetService} from "@/service/service";
-import {bridgedNetwork, NETWORK_MASTODON, NETWORK_THREADS} from "@/lib/network";
+import {networkSections, sectionKey} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
 
 export default {
@@ -103,13 +103,9 @@ export default {
   },
   computed: {
     sections() {
-      return [
-        {key: 'warpnet', label: 'Warpnet', network: ''},
-        {key: 'mastodon', label: 'Mastodon', network: NETWORK_MASTODON},
-        {key: 'threads', label: 'Threads', network: NETWORK_THREADS},
-      ].map((s) => ({
+      return networkSections(this.profiles).map((s) => ({
         ...s,
-        profiles: this.profiles.filter((p) => (bridgedNetwork(p) || 'warpnet') === s.key),
+        profiles: this.profiles.filter((p) => sectionKey(p) === s.key),
       }));
     },
   },

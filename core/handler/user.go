@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -203,7 +203,7 @@ func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {
 			return nil, err
 		}
 
-		return event.SearchUsersResponse{Cursor: cur, Users: slices.DeleteFunc(users, fediverse.IsFederatedWarpnet)}, nil
+		return event.SearchUsersResponse{Cursor: cur, Users: slices.DeleteFunc(users, bridge.IsFederatedWarpnet)}, nil
 	}
 }
 
@@ -231,7 +231,7 @@ func StreamGetUsersHandler(
 
 			return event.UsersResponse{
 				Cursor: cursor,
-				Users:  slices.DeleteFunc(users, fediverse.IsFederatedWarpnet),
+				Users:  slices.DeleteFunc(users, bridge.IsFederatedWarpnet),
 			}, nil
 		}
 
@@ -241,7 +241,7 @@ func StreamGetUsersHandler(
 
 		return event.UsersResponse{
 			Cursor: cursor,
-			Users:  slices.DeleteFunc(users, fediverse.IsFederatedWarpnet),
+			Users:  slices.DeleteFunc(users, bridge.IsFederatedWarpnet),
 		}, nil
 	}
 }
@@ -253,7 +253,7 @@ func refreshUsers(
 ) {
 	ownNodeInfo := streamer.NodeInfo()
 	if ownNodeInfo.OwnerId == ev.UserId {
-		gatewayNodeId := fediverse.GatewayNodeID()
+		gatewayNodeId := bridge.GatewayNodeID()
 		users, err := requestUsers(streamer, gatewayNodeId, event.PUBLIC_GET_WHOTOFOLLOW, ev)
 		if err != nil {
 			log.Errorf("get users handler: fediverse users: %v", err)

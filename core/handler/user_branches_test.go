@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -157,11 +157,11 @@ func TestRefreshUsers(t *testing.T) {
 		}}
 		ownerEv := event.GetAllUsersEvent{UserId: selfInfo.OwnerId}
 		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-			require.Equal(t, fediverse.GatewayNodeID(), nodeId)
+			require.Equal(t, bridge.GatewayNodeID(), nodeId)
 			require.Equal(t, stream.WarpRoute(event.PUBLIC_GET_WHOTOFOLLOW), path)
 			require.Equal(t, ownerEv, data)
 			return json.Marshal(event.UsersResponse{Users: []domain.User{
-				{Id: "alice@mastodon.social", NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork},
+				{Id: "alice@mastodon.social", NodeId: bridge.GatewayNodeID(), Network: bridge.MastodonNetwork},
 			}})
 		}}
 		refreshUsers(repo, ownerEv, streamer)

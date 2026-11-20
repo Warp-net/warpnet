@@ -29,7 +29,7 @@ const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 const WARPNET_NETWORKS = ['warpnet', 'testnet', 'mainnet'];
 
 // The foreign networks the ActivityPub gateway bridges in. The node tags every
-// bridged account and post with one (core/fediverse), and the tag is what the
+// bridged account and post with one (core/bridge), and the tag is what the
 // UI keys its icon, badge and reply policy off — never the instance host, which
 // is per-account.
 export const NETWORK_MASTODON = 'mastodon';
@@ -62,6 +62,30 @@ export function bridgedNetwork(user) {
 
 export function tweetNetwork(tweet) {
     return tweet ? networkOf(tweet.network, tweet.user_id) : '';
+}
+
+// The sections every listing offers, then one per other bridged network that
+// shows up: a network the client does not know still gets its own section.
+const KNOWN_SECTIONS = [
+    {key: 'warpnet', label: 'Warpnet', network: ''},
+    {key: NETWORK_MASTODON, label: 'Mastodon', network: NETWORK_MASTODON},
+    {key: NETWORK_THREADS, label: 'Threads', network: NETWORK_THREADS},
+];
+
+// sectionKey is the section a profile belongs in.
+export function sectionKey(profile) {
+    return bridgedNetwork(profile) || 'warpnet';
+}
+
+export function networkSections(profiles) {
+    const out = KNOWN_SECTIONS.map((s) => ({...s}));
+    for (const p of profiles || []) {
+        const key = sectionKey(p);
+        if (!out.some((s) => s.key === key)) {
+            out.push({key, label: key.charAt(0).toUpperCase() + key.slice(1), network: key});
+        }
+    }
+    return out;
 }
 
 export function isBridgedUser(user) {
