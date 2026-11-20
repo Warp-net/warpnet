@@ -54,6 +54,21 @@ final class WarpnetClientTests: XCTestCase {
     XCTAssertEqual(state, .failed(.transportFailure("invalid PSK: odd length")))
   }
 
+  func testDeviceTheNodeNoLongerKnowsIsReportedUnpaired() async throws {
+    let binding = FakeBinding()
+    binding.streamResults = [#"{"code":5000,"message":"middleware: auth: unknown client peer"}"#]
+    let client = try await connectedClient(binding)
+    do {
+      _ = try await client.request("/p", body: "{}")
+      XCTFail("expected a failure")
+    } catch {
+      XCTAssertEqual((error as? WarpnetError)?.isUnknownClientPeer, true)
+    }
+    var events = client.unpaired.makeAsyncIterator()
+    let event: Void? = await events.next()
+    XCTAssertNotNil(event)
+  }
+
   func testConnectDialsEveryCandidateAtOnce() async throws {
     let binding = FakeBinding()
     let client = makeClient(binding)

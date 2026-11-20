@@ -9,9 +9,13 @@ import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,6 +56,12 @@ class WarpnetClient(
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Uninitialised)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
     private var isPaused = false
+
+    private val _unpaired = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val unpaired: SharedFlow<Unit> = _unpaired.asSharedFlow()
 
     private val errorAdapter = moshi.adapter<WarpnetResponseError>()
     private val addrsAdapter = moshi.adapter<List<String>>()
@@ -266,6 +276,9 @@ class WarpnetClient(
                 lastFailure = e
                 delay(STREAM_RETRY_BACKOFFS[attempt])
             } catch (e: WarpnetException.ProtocolError) {
+                if (e.isUnknownClientPeer) {
+                    _unpaired.tryEmit(Unit)
+                }
                 if (!e.isRateLimited || attempt == STREAM_RETRY_BACKOFFS.size) {
                     throw e
                 }

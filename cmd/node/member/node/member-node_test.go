@@ -425,6 +425,33 @@ func TestNodeInfoAdvertisesOnlyPairedDevices(t *testing.T) {
 	require.Empty(t, m.NodeInfo().Aliases, "an unpaired device stops being advertised")
 }
 
+func TestNewMemberNodeUnpairsEveryDevice(t *testing.T) {
+	db := testDB(t)
+	authRepo := database.NewAuthRepo(db, "testnet")
+	require.NoError(t, authRepo.Authenticate("test", "test"))
+	_, err := authRepo.SetOwner(domain.Owner{UserId: "owner-1", Login: "owner"})
+	require.NoError(t, err)
+
+	aliases := database.NewAliasesRepo(db)
+	_, phone := testKeyAndID(t)
+	_, tablet := testKeyAndID(t)
+	require.NoError(t, aliases.SetAlias(domain.Alias{NodeId: phone.String(), Token: "old-token"}))
+	require.NoError(t, aliases.SetAlias(domain.Alias{NodeId: tablet.String(), Token: "old-token"}))
+
+	m := newMemberNodeOn(t, db, authRepo)
+
+	paired, err := aliases.GetAliases()
+	require.NoError(t, err)
+	require.Empty(t, paired)
+	require.Empty(t, m.NodeInfo().Aliases)
+
+	require.ErrorIs(t,
+		aliases.SetAlias(domain.Alias{NodeId: phone.String(), Token: "old-token"}),
+		database.ErrAliasRevoked,
+	)
+	require.NoError(t, aliases.SetAlias(domain.Alias{NodeId: phone.String(), Token: authRepo.SessionToken()}))
+}
+
 // TestStartBringsUpTheNode exercises the full startup path: libp2p host,
 // pubsub, discovery, mDNS, the CRDT stats store and the route table. It binds
 // the configured port, so it skips when something else already holds it.

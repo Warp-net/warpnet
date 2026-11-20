@@ -8,7 +8,11 @@ package site.warpnet.transport
 import com.squareup.moshi.Moshi
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -54,6 +58,20 @@ class WarpnetClientBytesTest {
             connectedClient(BytesBinding({ nodeError })).requestBytes("/p", "{}")
         }.exceptionOrNull()
         assertTrue(failure is WarpnetException.ProtocolError)
+    }
+
+    @Test
+    fun `a device the node no longer knows is reported unpaired`() = runBlocking {
+        val denied = """{"code":5000,"message":"middleware: auth: unknown client peer"}""".toByteArray()
+        val client = connectedClient(BytesBinding({ denied }))
+        val unpaired = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeout(5_000) { client.unpaired.first() }
+        }
+
+        val failure = runCatching { client.requestBytes("/p", "{}") }.exceptionOrNull()
+
+        assertTrue(failure is WarpnetException.ProtocolError)
+        unpaired.await()
     }
 
     @Test

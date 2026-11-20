@@ -17,6 +17,7 @@ package site.warpnet.warpdroid
 
 import android.app.Application
 import android.app.NotificationManager
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.StrictMode
@@ -27,6 +28,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
+import site.warpnet.warpdroid.components.pairing.PairedNodeStore
+import site.warpnet.warpdroid.components.pairing.PairingActivity
 import site.warpnet.warpdroid.components.systemnotifications.NotificationHelper
 import site.warpnet.warpdroid.service.WarpnetNotificationService
 import site.warpnet.warpdroid.settings.AppTheme
@@ -47,6 +50,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.conscrypt.Conscrypt
+import site.warpnet.transport.ConnectionState
 import site.warpnet.transport.WarpnetClient
 import site.warpnet.warpdroid.components.logviewer.LogBuffer
 import site.warpnet.warpdroid.components.logviewer.LogBufferTree
@@ -78,6 +82,9 @@ class WarpdroidApplication :
 
     @Inject
     lateinit var notificationHelper: NotificationHelper
+
+    @Inject
+    lateinit var pairedNodeStore: PairedNodeStore
 
     @Inject
     lateinit var logBuffer: LogBuffer
@@ -176,6 +183,19 @@ class WarpdroidApplication :
         // peerstore stays current when the desktop moves networks. The
         // worker is a no-op until a pairing exists.
         PairRefreshWorker.schedule(this)
+
+        transportScope.launch {
+            warpnetClient.unpaired.collect {
+                if (warpnetClient.state.value == ConnectionState.Uninitialised) return@collect
+                Timber.tag(TAG).w("desktop node no longer knows this device; resetting pairing")
+                pairedNodeStore.clear()
+                warpnetClient.shutdown()
+                startActivity(
+                    Intent(this@WarpdroidApplication, PairingActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                )
+            }
+        }
 
         // Drive the libp2p host through background/foreground transitions so
         // open streams don't hold the radio awake when the user leaves the

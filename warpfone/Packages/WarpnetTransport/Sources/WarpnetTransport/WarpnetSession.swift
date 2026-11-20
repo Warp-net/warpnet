@@ -118,15 +118,19 @@ public actor WarpnetSession {
       self.pairedAt = Date()
       return .success(pairing)
     } catch let error as WarpnetError where error.isDurablePairRejection {
-      await client.shutdown()
-      store.clear()
-      self.pairing = nil
-      self.pairedAt = nil
+      await forget()
       guard case let .protocolError(code, message) = error else { return nil }
       return .rejected(code: code, message: message)
     } catch {
       return nil
     }
+  }
+
+  public func forget() async {
+    await client.shutdown()
+    store.clear()
+    pairing = nil
+    pairedAt = nil
   }
 
   public func dialCandidates() -> [String] {

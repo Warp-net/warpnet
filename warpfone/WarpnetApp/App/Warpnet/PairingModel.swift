@@ -38,6 +38,11 @@ final class PairingModel {
         await session.dialCandidates()
       }
       accounts.configure(session: session)
+      Task { [weak self] in
+        for await _ in session.client.unpaired {
+          await self?.forget()
+        }
+      }
       if session.storedPairing != nil {
         phase = .restoring
       }
@@ -133,6 +138,15 @@ final class PairingModel {
       return
     }
     monitor?.start()
+  }
+
+  private func forget() async {
+    guard let session, accounts.currentClient.isAuth else { return }
+    monitor?.stop()
+    await session.forget()
+    accounts.setUnpaired()
+    notice = String(localized: "warpnet.pairing.auto-failed")
+    phase = .scanning
   }
 
   private func finish(_ info: AuthNodeInfo) {
