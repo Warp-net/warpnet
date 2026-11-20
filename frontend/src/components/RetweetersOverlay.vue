@@ -29,7 +29,7 @@
             class="ml-3 text-left flat-btn"
           >
             <p class="font-bold">{{ u.username || u.id }}</p>
-            <p class="text-dark text-sm">@{{ u.id }}</p>
+            <p class="text-dark text-sm">@{{ shortHandle(u.id) }}</p>
           </button>
         </div>
       </div>
@@ -40,6 +40,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {shortHandle} from "@/lib/network";
 
 export default {
   name: "RetweetersOverlay",
@@ -64,6 +65,7 @@ export default {
     },
   },
   methods: {
+    shortHandle,
     goProfile(id) {
       this.$emit('close');
       this.$router.push({ name: 'Profile', params: { id } });

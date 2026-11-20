@@ -28,7 +28,7 @@
         <img :src="r.avatar || '/default_profile.png'" class="h-10 w-10 rounded-full object-cover" alt="" />
         <button @click="$router.push({ name: 'Profile', params: { id: r.id } })" class="ml-3 text-left flat-btn">
           <p class="font-bold">{{ r.username || r.id }}</p>
-          <p class="text-dark text-sm">@{{ r.id }}</p>
+          <p class="text-dark text-sm">@{{ shortHandle(r.id) }}</p>
         </button>
         <div class="ml-auto flex gap-2">
           <button
@@ -49,6 +49,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {shortHandle} from "@/lib/network";
 
 export default {
   name: "FollowRequests",
@@ -65,6 +66,7 @@ export default {
     };
   },
   methods: {
+    shortHandle,
     // Each request row fills in on its own; a hanging profile leaves its
     // placeholder in place without holding back the rest of the list.
     hydrate(id) {

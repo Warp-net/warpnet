@@ -181,7 +181,7 @@ resulting from the use or misuse of this software.
           <div v-if="!noUser && !loading" class="px-3">
             <p class="font-bold text-xl">{{ profile.username || '...' }}</p>
             <p class="text-dark">
-              @{{ profile.id || '' }}
+              @{{ shortHandle(profile.id || '') }}
               <span
                 v-if="isFollower() && !isSelf"
                 class="text-sm font-medium bg-gray-100 py-1 px-1 mx-2 rounded text-gray-500 align-middle"
@@ -227,7 +227,7 @@ resulting from the use or misuse of this software.
           </div>
           <div v-if="noUser" class="px-5">
             <p class="text-black text-lg">
-              @{{ $route.params.id }}
+              @{{ shortHandle($route.params.id) }}
             </p>
           </div>
           <div
@@ -396,7 +396,7 @@ import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {decodeHtmlEntities, isBridgedUser} from "@/lib/network";
+import {decodeHtmlEntities, isBridgedUser, shortHandle} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
@@ -480,6 +480,7 @@ export default {
     },
   },
   methods: {
+    shortHandle,
     isMySelf(profileId) {
       return profileId === this.ownerProfile.user_id;
     },

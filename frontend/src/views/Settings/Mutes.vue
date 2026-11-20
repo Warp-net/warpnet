@@ -38,7 +38,7 @@
           class="ml-3 text-left flat-btn"
         >
           <p class="font-bold">{{ user.username || user.id }}</p>
-          <p class="text-dark text-sm">@{{ user.id }}</p>
+          <p class="text-dark text-sm">@{{ shortHandle(user.id) }}</p>
         </button>
         <button
           @click="unmute(user.id)"
@@ -55,6 +55,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {shortHandle} from "@/lib/network";
 import {toast} from "@/lib/toast";
 
 export default {
@@ -73,6 +74,7 @@ export default {
     };
   },
   methods: {
+    shortHandle,
     async hydrate(ids) {
       return Promise.all(
         (ids || []).map(async (id) => {

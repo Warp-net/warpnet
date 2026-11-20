@@ -55,6 +55,17 @@ resulting from the use or misuse of this software.
     <circle cx="12" cy="12" r="3.1" />
     <path d="M15.1 12v2.1a2.3 2.3 0 0 0 4.2 1.2" />
   </svg>
+  <!-- The Nostr icon from github.com/mbarulli/nostr-logo, released CC0. -->
+  <svg
+    v-else-if="network === NETWORK_NOSTR"
+    viewBox="44 38 176 176"
+    fill="currentColor"
+    :class="['inline-block align-[-0.125em]', colorClass, sizeClass]"
+    role="img"
+    aria-label="Nostr"
+  >
+    <path d="M210.8 199.4c0 3.1-2.5 5.7-5.7 5.7h-68c-3.1 0-5.7-2.5-5.7-5.7v-15.5c.3-19 2.3-37.2 6.5-45.5 2.5-5 6.7-7.7 11.5-9.1 9.1-2.7 24.9-.9 31.7-1.2 0 0 20.4.8 20.4-10.7s-9.1-8.6-9.1-8.6c-10 .3-17.7-.4-22.6-2.4-8.3-3.3-8.6-9.2-8.6-11.2-.4-23.1-34.5-25.9-64.5-20.1-32.8 6.2.4 53.3.4 116.1v8.4c0 3.1-2.6 5.6-5.7 5.6H57.7c-3.1 0-5.7-2.5-5.7-5.7v-144c0-3.1 2.5-5.7 5.7-5.7h31.7c3.1 0 5.7 2.5 5.7 5.7 0 4.7 5.2 7.2 9 4.5 11.4-8.2 26-12.5 42.4-12.5 36.6 0 64.4 21.4 64.4 68.7v83.2ZM150 99.3c0-6.7-5.4-12.1-12.1-12.1s-12.1 5.4-12.1 12.1 5.4 12.1 12.1 12.1S150 106 150 99.3Z" />
+  </svg>
   <!-- Any other bridged network gets a generic "external network" mark. -->
   <i
     v-else
@@ -65,7 +76,7 @@ resulting from the use or misuse of this software.
 </template>
 
 <script>
-import {NETWORK_MASTODON, NETWORK_THREADS} from "@/lib/network";
+import {NETWORK_MASTODON, NETWORK_NOSTR, NETWORK_THREADS} from "@/lib/network";
 
 export default {
   name: 'NetworkIcon',
@@ -77,7 +88,7 @@ export default {
     colorClass: {type: String, default: 'text-[color:var(--gd-trim)]'},
   },
   data() {
-    return {NETWORK_MASTODON, NETWORK_THREADS};
+    return {NETWORK_MASTODON, NETWORK_NOSTR, NETWORK_THREADS};
   },
 };
 </script>
