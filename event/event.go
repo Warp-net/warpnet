@@ -339,6 +339,9 @@ type Message struct {
 	Timestamp   time.Time       `json:"timestamp"`
 	Version     string          `json:"version"`
 	Signature   string          `json:"signature"`
+	// BridgeKey is set only on messages to the gateway: the key it acts with
+	// for the sender on bridged networks.
+	BridgeKey string `json:"bridge_key,omitempty"`
 }
 
 // SigningBytes returns the bytes an ed25519 signature covers: the raw body, the

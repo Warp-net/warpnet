@@ -3,8 +3,16 @@ package stream
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -17,11 +25,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"io"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 // fakeNewStreamNode is a NodeStreamer whose NewStream always fails with a
@@ -151,6 +154,7 @@ func TestStreamPool_SendDeliversSignedEnvelope(t *testing.T) {
 	assert.Equal(t, `{"ping":true}`, string(msg.Body))
 	assert.False(t, msg.Timestamp.IsZero())
 	assert.NotEmpty(t, msg.Signature)
+	assert.Empty(t, msg.BridgeKey, "only the gateway gets the bridge key")
 
 	pub, err := client.Peerstore().PubKey(client.ID()).Raw()
 	require.NoError(t, err)
@@ -490,3 +494,31 @@ func TestHashBody_IsStableAndDiscriminating(t *testing.T) {
 	assert.NotEmpty(t, hashBody(nil))
 	assert.Equal(t, hashBody(nil), hashBody([]byte{}))
 }
+
+func TestStreamPool_GatewayGetsTheBridgeKey(t *testing.T) {
+	client := newStreamHost(t)
+	gateway := newStreamHost(t)
+	original := fediverse.GatewayNodeID()
+	fediverse.SetGatewayNodeID(gateway.ID().String())
+	t.Cleanup(restoreGateway(original))
+
+	received := echoServer(t, gateway, []byte(`{}`))
+	linkHosts(t, client, gateway)
+	_, err := newPool(t, client).Send(addrOf(gateway), testRoute, []byte(`{}`))
+	require.NoError(t, err)
+	require.Len(t, *received, 1)
+
+	priv, err := client.Peerstore().PrivKey(client.ID()).Raw()
+	require.NoError(t, err)
+	want, err := security.BridgeKey(priv)
+	require.NoError(t, err)
+	assert.Equal(t, hex.EncodeToString(want), (*received)[0].BridgeKey)
+}
+
+func restoreGateway(id string) func() {
+	return gatewayRestorer{id}.restore
+}
+
+type gatewayRestorer struct{ id string }
+
+func (g gatewayRestorer) restore() { fediverse.SetGatewayNodeID(g.id) }
