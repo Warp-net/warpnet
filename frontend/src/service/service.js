@@ -2678,13 +2678,13 @@ export const warpnetService = {
         });
     },
 
-    // allowNostr records the sign-up consent to show the owner's content on
-    // Nostr. The gateway reads it from the profile metadata; it is never
-    // revoked.
-    async allowNostr() {
+    // denyNostr records the sign-up opt-out of showing the owner's content on
+    // Nostr, which is on by default. The gateway reads it from the profile
+    // metadata.
+    async denyNostr() {
         return await this.sendToNode({
             path: PRIVATE_POST_USER,
-            body: {metadata: {nostr: 'allow'}},
+            body: {metadata: {nostr: 'deny'}},
         });
     },
 

@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 vi.mock('@/service/service', () => ({
   warpnetService: {
     signInUser: vi.fn(),
-    allowNostr: vi.fn(),
+    denyNostr: vi.fn(),
     isFirstRun: vi.fn(),
     consumePendingDeepLink: vi.fn(),
     isDesktopNode: vi.fn(),
@@ -58,8 +58,8 @@ beforeEach(() => {
   routerReplace.mockClear();
   warpnetService.resumeSession.mockResolvedValue(false);
   warpnetService.signInUser.mockResolvedValue(undefined);
-  warpnetService.allowNostr.mockReset();
-  warpnetService.allowNostr.mockResolvedValue(undefined);
+  warpnetService.denyNostr.mockReset();
+  warpnetService.denyNostr.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
   warpnetService.consumePendingDeepLink.mockResolvedValue("");
   warpnetService.isDesktopNode.mockReturnValue(true);
@@ -270,7 +270,7 @@ describe('Root.vue', () => {
   //
   // Drive the modal sign-up to the final step so we exercise the
   // real signMeUp() handler.
-  const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD, nostr = 'deny' } = {}) => {
+  const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD, nostr = '' } = {}) => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
@@ -291,37 +291,28 @@ describe('Root.vue', () => {
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
   };
 
-  it('asks about Nostr before the account can be created', async () => {
+  it('shows the posts on Nostr by default', async () => {
     renderRoot({ firstRun: true });
-    await completeSignUp({ nostr: '' });
-
-    const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
-    expect(signUpButtons[signUpButtons.length - 1]).toBeDisabled();
-    expect(warpnetService.signInUser).not.toHaveBeenCalled();
-  });
-
-  it('saves the Nostr consent after sign-up when allowed', async () => {
-    renderRoot({ firstRun: true });
-    await completeSignUp({ nostr: 'allow' });
+    await completeSignUp();
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
-    expect(warpnetService.allowNostr).toHaveBeenCalledTimes(1);
-    expect(warpnetService.signInUser.mock.invocationCallOrder[0])
-      .toBeLessThan(warpnetService.allowNostr.mock.invocationCallOrder[0]);
+    expect(warpnetService.denyNostr).not.toHaveBeenCalled();
   });
 
-  it('stores nothing about Nostr when not allowed', async () => {
+  it('saves the Nostr opt-out after sign-up', async () => {
     renderRoot({ firstRun: true });
     await completeSignUp({ nostr: 'deny' });
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
-    expect(warpnetService.allowNostr).not.toHaveBeenCalled();
+    expect(warpnetService.denyNostr).toHaveBeenCalledTimes(1);
+    expect(warpnetService.signInUser.mock.invocationCallOrder[0])
+      .toBeLessThan(warpnetService.denyNostr.mock.invocationCallOrder[0]);
   });
 
-  it('still signs in when saving the Nostr consent fails', async () => {
-    warpnetService.allowNostr.mockRejectedValueOnce(new Error('node busy'));
+  it('still signs in when saving the Nostr opt-out fails', async () => {
+    warpnetService.denyNostr.mockRejectedValueOnce(new Error('node busy'));
     renderRoot({ firstRun: true });
-    await completeSignUp({ nostr: 'allow' });
+    await completeSignUp({ nostr: 'deny' });
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
   });

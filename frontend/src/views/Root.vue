@@ -338,7 +338,7 @@ resulting from the use or misuse of this software.
             <fieldset class="mb-6">
               <legend class="font-bold mb-2">Show your posts on Nostr?</legend>
               <p class="text-sm text-dark mb-3">
-                Nostr is another open network. If you allow it, your public posts, replies,
+                Nostr is another open network. Unless you opt out, your public posts, replies,
                 reactions and follows also appear there. You can't change this later.
               </p>
               <label class="flex items-center mb-2 cursor-pointer">
@@ -359,8 +359,6 @@ resulting from the use or misuse of this software.
               v-if="!isLoading"
               @click="signMeUp"
               class="w-full rounded-full mt-4 py-3 bg-blue text-white font-bold hover:bg-darkblue"
-              :class="!nostrConsent ? 'opacity-50 cursor-not-allowed' : ''"
-              :disabled="!nostrConsent"
             >
               Sign up
             </button>
@@ -407,7 +405,7 @@ export default {
       contentDistribution: false,
       futureAds: false,
       localStorageLoss: false,
-      nostrConsent: "",
+      nostrConsent: "allow",
       signUpError: "",
       firstRunError: false,
       firstRunErrorMessage: "",
@@ -477,7 +475,6 @@ export default {
       }
     },
     async signMeUp() {
-      if (!this.nostrConsent) return;
       try {
         this.isLoading = true;
         this.signUpError = "";
@@ -485,11 +482,11 @@ export default {
           username: this.username,
           password: this.password,
         });
-        if (this.nostrConsent === "allow") {
+        if (this.nostrConsent === "deny") {
           try {
-            await warpnetService.allowNostr();
+            await warpnetService.denyNostr();
           } catch (err) {
-            console.error("failed to save the Nostr consent:", err);
+            console.error("failed to save the Nostr opt-out:", err);
           }
         }
         this.setStep("");
