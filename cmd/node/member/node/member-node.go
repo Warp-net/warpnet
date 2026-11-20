@@ -111,10 +111,7 @@ func NewMemberNode(
 	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
-	aliases, err := aliasesRepo.GetAliases()
-	if err != nil {
-		return nil, err
-	}
+	aliases, _ := aliasesRepo.GetAliases()
 	for _, alias := range aliases {
 		if err := aliasesRepo.DeleteAlias(alias.NodeId); err != nil {
 			return nil, err
