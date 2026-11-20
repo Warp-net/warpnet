@@ -64,6 +64,30 @@ export function tweetNetwork(tweet) {
     return tweet ? networkOf(tweet.network, tweet.user_id) : '';
 }
 
+// The sections every listing offers, then one per other bridged network that
+// shows up: a network the client does not know still gets its own section.
+const KNOWN_SECTIONS = [
+    {key: 'warpnet', label: 'Warpnet', network: ''},
+    {key: NETWORK_MASTODON, label: 'Mastodon', network: NETWORK_MASTODON},
+    {key: NETWORK_THREADS, label: 'Threads', network: NETWORK_THREADS},
+];
+
+// sectionKey is the section a profile belongs in.
+export function sectionKey(profile) {
+    return bridgedNetwork(profile) || 'warpnet';
+}
+
+export function networkSections(profiles) {
+    const out = KNOWN_SECTIONS.map((s) => ({...s}));
+    for (const p of profiles || []) {
+        const key = sectionKey(p);
+        if (!out.some((s) => s.key === key)) {
+            out.push({key, label: key.charAt(0).toUpperCase() + key.slice(1), network: key});
+        }
+    }
+    return out;
+}
+
 export function isBridgedUser(user) {
     return bridgedNetwork(user) !== '';
 }
