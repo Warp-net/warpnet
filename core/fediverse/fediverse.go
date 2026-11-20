@@ -47,11 +47,11 @@ const (
 	MastodonNetwork = "mastodon"
 
 	// DefaultGatewayNodeID is the libp2p peer id of the official gateway,
-	// derived from its secret seed. It is the home node of every bridged
+	// derived from its secret signing key. It is the home node of every bridged
 	// Mastodon user, and the fallback when the owner has not configured their
 	// own gateway in settings. Only the effective gateway gets the node's
 	// bridge key.
-	DefaultGatewayNodeID = "12D3KooWMssamruVNsZpwUMKMmZ8WbHNfFMBQEtq8SgHfo12JSUr"
+	DefaultGatewayNodeID = "12D3KooWKSVXZAF8dE2Cv449x2jkb1mCFqs7b9CV59Dpzqnur2N3"
 
 	// ThreadsNetwork is the User.Network tag for accounts bridged in from Meta's
 	// Threads. They arrive through the same gateway and behave the same locally,
