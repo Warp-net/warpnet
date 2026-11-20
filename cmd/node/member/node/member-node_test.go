@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/middleware"
 	corenode "github.com/Warp-net/warpnet/core/node"
@@ -202,7 +202,7 @@ func (b bridgedUsers) GetBatch(userIds ...string) ([]domain.User, error) {
 	for _, id := range userIds {
 		u := domain.User{Id: id}
 		if b.ids[id] {
-			u.Network = fediverse.MastodonNetwork
+			u.Network = bridge.MastodonNetwork
 		}
 		users = append(users, u)
 	}
@@ -527,9 +527,9 @@ func TestStopIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = authRepo.SetOwner(domain.Owner{
-		NodeId:   ownNodeId.String(),
-		UserId:   ownNodeId.String(),
-		Login: "test",
+		NodeId: ownNodeId.String(),
+		UserId: ownNodeId.String(),
+		Login:  "test",
 	})
 	require.NoError(t, err)
 

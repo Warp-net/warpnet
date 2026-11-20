@@ -25,11 +25,11 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package fediverse holds everything the node needs for the ActivityPub bridge.
+// Package bridge holds everything the node needs for the gateway bridges.
 // The node itself stays unaware of the gateway: this package only tags bridged
 // users with a foreign network and seeds a single entry account whose home node
 // is the gateway, so it resolves like any other remote user.
-package fediverse
+package bridge
 
 import (
 	"errors"

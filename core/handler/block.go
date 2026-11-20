@@ -30,7 +30,7 @@ package handler
 import (
 	"errors"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
@@ -214,7 +214,7 @@ func escalateToPeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister
 	case u.NodeId == "":
 		log.Warnf("block: target user %s has no node id, peer block skipped", blockeeId)
 		return
-	case fediverse.IsBridged(u.Network) || u.NodeId == fediverse.GatewayNodeID():
+	case bridge.IsBridged(u.Network) || u.NodeId == bridge.GatewayNodeID():
 		log.Infof("block: target user %s is bridged, gateway node %s stays unblocked", blockeeId, u.NodeId)
 		return
 	}
@@ -236,7 +236,7 @@ func removePeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister, bl
 		return
 	case u.NodeId == "":
 		return
-	case fediverse.IsBridged(u.Network) || u.NodeId == fediverse.GatewayNodeID():
+	case bridge.IsBridged(u.Network) || u.NodeId == bridge.GatewayNodeID():
 		return
 	}
 	if err := nodeRepo.BlocklistRemove(u.NodeId); err != nil {

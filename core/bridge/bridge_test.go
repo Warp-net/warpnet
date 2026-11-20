@@ -1,5 +1,5 @@
 //nolint:all
-package fediverse
+package bridge
 
 import (
 	"errors"

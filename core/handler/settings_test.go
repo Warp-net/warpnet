@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -158,7 +158,7 @@ func TestStreamGetGatewaySettingsHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if resp.(event.GetGatewaySettingsResponse).NodeID != fediverse.DefaultGatewayNodeID {
+		if resp.(event.GetGatewaySettingsResponse).NodeID != bridge.DefaultGatewayNodeID {
 			t.Fatalf("expected default node id, got %+v", resp)
 		}
 	})
@@ -210,7 +210,7 @@ func TestStreamUpdateGatewaySettingsHandler(t *testing.T) {
 		if _, err := h(marshal(t, event.UpdateGatewaySettingsEvent{NodeID: ""}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if saved.NodeID != fediverse.DefaultGatewayNodeID {
+		if saved.NodeID != bridge.DefaultGatewayNodeID {
 			t.Fatalf("expected default node id persisted, got %+v", saved)
 		}
 	})

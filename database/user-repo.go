@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/oklog/ulid/v2"
 	"maps"
@@ -172,7 +172,7 @@ func (repo *UserRepo) notifyNewUser(user domain.User) {
 	if repo.notifier == nil || user.Id == repo.ownerUserId {
 		return
 	}
-	if fediverse.IsBridged(user.Network) {
+	if bridge.IsBridged(user.Network) {
 		return
 	}
 	name := user.Username

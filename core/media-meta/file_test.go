@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/assert"
@@ -92,10 +92,10 @@ func TestVerifyForeignMedia(t *testing.T) {
 	})
 
 	t.Run("bridged fediverse media is out of scope", func(t *testing.T) {
-		bridged := domain.User{Id: "warpnet@mastodon.social", Network: fediverse.MastodonNetwork}
+		bridged := domain.User{Id: "warpnet@mastodon.social", Network: bridge.MastodonNetwork}
 		assert.NoError(t, VerifyForeignImage(bridged, "https://mastodon.social/a.png", "data:image/png;base64,AAAA"))
 
-		viaGateway := domain.User{Id: "someone@mastodon.social", NodeId: fediverse.GatewayNodeID()}
+		viaGateway := domain.User{Id: "someone@mastodon.social", NodeId: bridge.GatewayNodeID()}
 		assert.NoError(t, VerifyForeignImage(viaGateway, "https://mastodon.social/b.png", "data:image/png;base64,AAAA"))
 	})
 }

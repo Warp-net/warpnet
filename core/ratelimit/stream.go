@@ -32,7 +32,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -167,7 +167,7 @@ func (l *StreamLimiter) Close() {
 }
 
 func (l *StreamLimiter) route(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) Limit {
-	if remotePeer.String() == fediverse.GatewayNodeID() {
+	if remotePeer.String() == bridge.GatewayNodeID() {
 		return gateway
 	}
 	if limit, ok := l.routes[route.String()]; ok {

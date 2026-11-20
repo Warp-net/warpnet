@@ -29,7 +29,7 @@ const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 const WARPNET_NETWORKS = ['warpnet', 'testnet', 'mainnet'];
 
 // The foreign networks the ActivityPub gateway bridges in. The node tags every
-// bridged account and post with one (core/fediverse), and the tag is what the
+// bridged account and post with one (core/bridge), and the tag is what the
 // UI keys its icon, badge and reply policy off — never the instance host, which
 // is per-account.
 export const NETWORK_MASTODON = 'mastodon';

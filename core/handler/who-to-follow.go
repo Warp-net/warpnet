@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -74,7 +74,7 @@ func StreamGetWhoToFollowHandler(
 			if user.IsOffline { // exclude offline
 				continue
 			}
-			if fediverse.IsFederatedWarpnet(user) {
+			if bridge.IsFederatedWarpnet(user) {
 				continue
 			}
 
@@ -89,7 +89,7 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if user.NodeId != "" && !fediverse.IsBridged(user.Network) {
+			if user.NodeId != "" && !bridge.IsBridged(user.Network) {
 				if idx, ok := latestByNode[user.NodeId]; ok {
 					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
 						whotofollow[idx] = user

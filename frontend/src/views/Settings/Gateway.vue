@@ -66,7 +66,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 
-// Mirror of fediverse.DefaultGatewayNodeID; used as the reset value and as a
+// Mirror of bridge.DefaultGatewayNodeID; used as the reset value and as a
 // fallback if the node response omits node_id.
 const DEFAULT_GATEWAY_NODE_ID = "12D3KooWKSVXZAF8dE2Cv449x2jkb1mCFqs7b9CV59Dpzqnur2N3";
 

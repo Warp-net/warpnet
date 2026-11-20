@@ -37,7 +37,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -245,7 +245,7 @@ func (p *streamPool) send(
 		Version:     "0.0.0", // TODO event message version
 	}
 	msg.Signature = security.Sign(p.privKey, msg.SigningBytes())
-	if serverInfo.ID.String() == fediverse.GatewayNodeID() {
+	if serverInfo.ID.String() == bridge.GatewayNodeID() {
 		if key, kerr := security.BridgeKey(p.privKey); kerr == nil {
 			msg.BridgeKey = hex.EncodeToString(key)
 		}
