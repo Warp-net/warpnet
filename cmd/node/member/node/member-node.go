@@ -111,6 +111,12 @@ func NewMemberNode(
 	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
+	aliases, _ := aliasesRepo.GetAliases()
+	for _, alias := range aliases {
+		if err := aliasesRepo.DeleteAlias(alias.NodeId); err != nil {
+			return nil, err
+		}
+	}
 	owner := authRepo.GetOwner()
 
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to

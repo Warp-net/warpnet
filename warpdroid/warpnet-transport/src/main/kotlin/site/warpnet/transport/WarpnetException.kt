@@ -24,6 +24,9 @@ sealed class WarpnetException(message: String, cause: Throwable? = null) : Excep
 
         val isRateLimited: Boolean get() = code == RATE_LIMITED
 
+        val isUnknownClientPeer: Boolean
+            get() = serverMessage.contains("unknown client peer", ignoreCase = true)
+
         companion object {
             const val RATE_LIMITED = 5001
         }
