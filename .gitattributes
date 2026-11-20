@@ -1,6 +1,8 @@
 core/moderation/binding/go-llama.cpp/** linguist-detectable=false
 docs/** linguist-detectable=false
 
+warpdroid/app/src/test/*.kt linguist-detectable=false
+warpdroid/app/src/main/java/site/warpnet/warpdroid/components/*.kt linguist-detectable=false
 *.c linguist-detectable=false
 *.cpp linguist-detectable=false
 *.h linguist-detectable=false
