@@ -280,3 +280,30 @@ describe('Profile.vue tabs', () => {
     expect(screen.getByText('plain tweet')).toBeInTheDocument();
   });
 });
+
+describe('Profile.vue loading states', () => {
+  const bob = { id: 'bob', user_id: 'bob', username: 'Bob', created_at: '2025-12-01T10:00:00Z' };
+
+  it('spins instead of claiming an empty feed while the tweets load', async () => {
+    warpnetService.getProfile.mockResolvedValue(bob);
+    warpnetService.getTweets.mockImplementation(() => new Promise(() => {}));
+
+    renderProfile('bob');
+
+    expect(await screen.findByRole('heading', { name: 'Bob' })).toBeInTheDocument();
+    expect(screen.queryByText(/tweeted yet/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('status', { name: 'Loading' }).length).toBeGreaterThan(0);
+  });
+
+  it('fills bio and counts from the refreshed copy of another user', async () => {
+    warpnetService.getProfile
+      .mockResolvedValueOnce(bob)
+      .mockResolvedValueOnce({ ...bob, bio: 'hello from bob', followers_count: 42 });
+
+    renderProfile('bob');
+
+    expect(await screen.findByText('hello from bob')).toBeInTheDocument();
+    expect(screen.getByText('42')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryAllByRole('status', { name: 'Loading' })).toHaveLength(0));
+  });
+});
