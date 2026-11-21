@@ -32,7 +32,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -197,13 +196,8 @@ func StreamGetImageHandler(
 
 		u, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			if !bridge.IsBridgedUserID(ev.UserId) {
-				img, _ := mediaRepo.GetImage(ev.UserId, ev.Key)
-				return event.GetImageResponse{File: string(img)}, nil
-			}
-			// An author seen only inside another post, such as a repost, is not
-			// stored yet; a bridged one is served by the gateway all the same.
-			u, err = domain.User{Id: ev.UserId, NodeId: bridge.GatewayNodeID()}, nil
+			img, _ := mediaRepo.GetImage(ev.UserId, ev.Key)
+			return event.GetImageResponse{File: string(img)}, nil
 		}
 		if err != nil {
 			return nil, fmt.Errorf("get image: fetching user: %w", err)

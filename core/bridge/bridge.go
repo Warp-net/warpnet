@@ -89,13 +89,6 @@ func IsFederatedWarpnet(user domain.User) bool {
 	return err == nil
 }
 
-// IsBridgedUserID reports whether a user id is a handle on another network
-// (name@host); a Warpnet user id is a bare ULID and never carries one.
-func IsBridgedUserID(id string) bool {
-	name, host, ok := strings.Cut(strings.TrimPrefix(id, "@"), "@")
-	return ok && name != "" && host != ""
-}
-
 var ErrNotSupported = errors.New("not supported functionality")
 
 // gatewayNodeID is the effective gateway peer id. It defaults to
