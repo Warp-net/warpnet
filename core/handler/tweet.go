@@ -1287,7 +1287,7 @@ func StreamEditTweetHandler(
 		// detects an edited source via the comparison of source
 		// UpdatedAt and the quote's CreatedAt and surfaces the source
 		// as "unavailable".
-		cancelRetweetsForEditedTweet(repo, existing.Id)
+		cancelRetweetsForEditedTweet(repo, timelineRepo, existing.UserId, existing.Id)
 
 		return event.EditTweetResponse(out), nil
 	}
@@ -1298,7 +1298,7 @@ func StreamEditTweetHandler(
 // logged and swallowed — a stuck retweet is not worth failing the
 // edit response over. Cross-node propagation of the cancellation is
 // out of scope.
-func cancelRetweetsForEditedTweet(repo TweetsStorer, tweetId string) {
+func cancelRetweetsForEditedTweet(repo TweetsStorer, timelineRepo TimelineUpdater, authorId, tweetId string) {
 	var cursor string
 	limit := uint64(100)
 	for {
@@ -1308,10 +1308,18 @@ func cancelRetweetsForEditedTweet(repo TweetsStorer, tweetId string) {
 			return
 		}
 		for _, retweeterId := range retweeters {
-			// Local cleanup on the edited tweet's own node; the retweeters'
-			// shared (CRDT) counts live on their nodes, so don't touch them.
-			if err := repo.UnRetweet(retweeterId, tweetId, false); err != nil {
+			// Edits run on the author's node: only the author's own retweet is
+			// counted (CRDT) and timelined here, like an unretweet; the other
+			// retweeters' counts live on their nodes.
+			isOwn := retweeterId == authorId
+			if err := repo.UnRetweet(retweeterId, tweetId, isOwn); err != nil {
 				log.Warnf("edit tweet: cancel retweet by %s of %s: %v", retweeterId, tweetId, err)
+				continue
+			}
+			if isOwn && timelineRepo != nil {
+				if err := timelineRepo.DeleteTweetFromTimeline(authorId, domain.RetweetPrefix+tweetId); err != nil {
+					log.Warnf("edit tweet: timeline delete of retweet %s: %v", tweetId, err)
+				}
 			}
 		}
 		if cur == "" || uint64(len(retweeters)) < limit {
