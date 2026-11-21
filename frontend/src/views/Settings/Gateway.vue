@@ -11,14 +11,14 @@
         >
           <i class="fas fa-arrow-left text-blue"></i>
         </button>
-        <h1 class="text-xl font-bold ml-4">Fediverse gateway</h1>
+        <h1 class="text-xl font-bold ml-4">Bridge gateway</h1>
       </div>
 
       <Loader :loading="loading" />
 
       <form v-if="!loading" @submit.prevent="save" class="p-5 space-y-4 max-w-xl">
         <p class="text-sm text-dark">
-          Bridged fediverse accounts resolve through the ActivityPub gateway node.
+          Bridged Mastodon, Threads and Nostr accounts resolve through the bridge gateway node.
           Change its peer id only if you run your own gateway. Changes take effect
           after the node restarts.
         </p>
