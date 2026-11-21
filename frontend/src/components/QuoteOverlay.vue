@@ -48,7 +48,7 @@
 
         <div class="mt-3 border border-lighter rounded p-3 bg-lightest text-sm">
           <p class="font-bold">{{ tweet.username || 'Anonymous' }}
-            <span class="text-dark font-normal ml-1">@{{ tweet.user_id }}</span>
+            <span class="text-dark font-normal ml-1">@{{ shortHandle(tweet.user_id) }}</span>
           </p>
           <p class="mt-1 line-clamp-3">{{ tweet.text }}</p>
         </div>
@@ -70,6 +70,7 @@
 </template>
 
 <script>
+import {shortHandle} from "@/lib/network";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {defineAsyncComponent} from "vue";
@@ -107,6 +108,7 @@ export default {
     show(v) { if (v) this.text = ''; },
   },
   methods: {
+    shortHandle,
     insertEmoji(emoji) {
       const field = this.$refs.composer;
       const next = insertEmoji({
