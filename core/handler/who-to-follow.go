@@ -14,19 +14,15 @@ type WhoToFollowAuthStorer interface {
 	GetOwner() domain.Owner
 }
 
-type WhoToFollowUserFetcher interface {
-	Get(userId string) (user domain.User, err error)
-	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
-}
-
 type WhoToFollowFollowsLister interface {
 	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 func StreamGetWhoToFollowHandler(
 	authRepo WhoToFollowAuthStorer,
-	userRepo WhoToFollowUserFetcher,
+	userRepo UserFetcher,
 	followRepo WhoToFollowFollowsLister,
+	streamer UserStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
@@ -37,6 +33,11 @@ func StreamGetWhoToFollowHandler(
 
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
+		}
+
+		// Bridged accounts reach this node only from the gateway's suggestions.
+		if ev.UserId == streamer.NodeInfo().OwnerId && (ev.Cursor == nil || *ev.Cursor == "") {
+			go refreshUsers(userRepo, ev, streamer)
 		}
 
 		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
