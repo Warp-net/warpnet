@@ -674,7 +674,13 @@ export default {
     shortHandle,
     async loadAuthor() {
       try {
-        this.profile = await warpnetService.getProfile(this.tweet.user_id);
+        // A bridged author may be unknown to the node, like the author of a
+        // reposted note; the gateway hint lets the node fetch and keep them,
+        // and only a kept author's images can be fetched.
+        const hint = this.isBridged
+          ? (await warpnetService.getGatewaySettings()).node_id
+          : undefined;
+        this.profile = await warpnetService.getProfile(this.tweet.user_id, hint);
         const avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key});
         if (avatar) this.profile.avatar = avatar;
       } catch (err) {
@@ -1431,9 +1437,13 @@ export default {
     // Every asset is an independent per-element fetch: the text and the
     // counters must never wait behind a hanging author node or blob, and
     // one failed element must not take its siblings down with it.
-    this.loadAuthor();
+    const author = this.loadAuthor();
     this.loadRetweeterLabel();
-    this.loadImages();
+    if (this.isBridged) {
+      author.then(() => this.loadImages());
+    } else {
+      this.loadImages();
+    }
     if (this.isLocked) {
       this.loadSponsoredContent()
           .catch(err => console.warn(`failed to load sponsored tweet [${this.tweet.id}]`, err));
