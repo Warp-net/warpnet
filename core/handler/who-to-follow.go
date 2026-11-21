@@ -8,6 +8,8 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 	"strings"
+	"sync/atomic"
+	"time"
 )
 
 type WhoToFollowAuthStorer interface {
@@ -107,5 +109,47 @@ func StreamGetWhoToFollowHandler(
 			Cursor: cursor,
 			Users:  whotofollow,
 		}, nil
+	}
+}
+
+const (
+	bridgedSuggestionsEvery = 10 * time.Minute
+	bridgedSuggestionsRetry = 30 * time.Second
+	bridgedSuggestionsWait  = 3 * time.Second
+)
+
+// WithBridgedSuggestions refreshes the owner's suggestions from the gateway
+// before answering, at most once per bridgedSuggestionsEvery, or again after
+// bridgedSuggestionsRetry when the gateway was not reached yet. Who-to-follow
+// reads only this node's users, so without it a new node offered no Mastodon
+// or Nostr accounts until its owner happened to open the gateway's profile. A
+// slow gateway holds the answer for bridgedSuggestionsWait at most; what it
+// sends later is stored for the next request.
+func WithBridgedSuggestions(h warpnet.WarpHandlerFunc, userRepo UserFetcher, streamer UserStreamer) warpnet.WarpHandlerFunc {
+	var last atomic.Int64
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetAllUsersEvent
+		if json.Unmarshal(buf, &ev) == nil && ev.UserId != "" && ev.UserId == streamer.NodeInfo().OwnerId {
+			prev, now := last.Load(), time.Now().UnixNano()
+			if time.Duration(now-prev) >= bridgedSuggestionsEvery && last.CompareAndSwap(prev, now) {
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					gatewayId := bridge.GatewayNodeID()
+					users, err := requestUsers(streamer, gatewayId, event.PUBLIC_GET_WHOTOFOLLOW, ev)
+					if err != nil {
+						log.Warnf("who to follow: bridged suggestions: %v", err)
+						last.Store(now - int64(bridgedSuggestionsEvery-bridgedSuggestionsRetry))
+						return
+					}
+					storeUsers(userRepo, users, gatewayId, streamer.NodeInfo())
+				}()
+				select {
+				case <-done:
+				case <-time.After(bridgedSuggestionsWait):
+				}
+			}
+		}
+		return h(buf, s)
 	}
 }

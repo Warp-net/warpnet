@@ -2,9 +2,13 @@ package handler
 
 import (
 	"errors"
+	"github.com/Warp-net/warpnet/core/bridge"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -131,4 +135,59 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			t.Fatalf("expected empty users: %v", r.Users)
 		}
 	})
+}
+
+func TestWithBridgedSuggestions(t *testing.T) {
+	const owner = "owner-1"
+	inner := func([]byte, warpnet.WarpStream) (any, error) { return "answered", nil }
+	gatewayUser := domain.User{Id: "npub1abc@nostr.com", Username: "ed", NodeId: bridge.GatewayNodeID(), Network: "nostr"}
+
+	var created []string
+	repo := stubUserFetcher{
+		createFn: func(u domain.User) (domain.User, error) {
+			created = append(created, u.Id)
+			return u, nil
+		},
+	}
+	var asked []string
+	streamer := stubUserStreamer{
+		nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+		genericStreamFn: func(nodeId string, path stream.WarpRoute, _ any) ([]byte, error) {
+			asked = append(asked, nodeId+" "+string(path))
+			return json.Marshal(event.UsersResponse{Users: []domain.User{gatewayUser}})
+		},
+	}
+	h := WithBridgedSuggestions(inner, repo, streamer)
+
+	out, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+	require.NoError(t, err)
+	require.Equal(t, "answered", out)
+	require.Equal(t, []string{bridge.GatewayNodeID() + " " + string(event.PUBLIC_GET_WHOTOFOLLOW)}, asked)
+	require.Equal(t, []string{gatewayUser.Id}, created, "the gateway's suggestions are stored before answering")
+
+	_, err = h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+	require.NoError(t, err)
+	require.Len(t, asked, 1, "the gateway is asked at most once per interval")
+
+	other := WithBridgedSuggestions(inner, repo, streamer)
+	_, err = other(marshal(t, event.GetAllUsersEvent{UserId: "someone-else"}), nil)
+	require.NoError(t, err)
+	require.Len(t, asked, 1, "only the owner's own suggestions are refreshed")
+}
+
+func TestWithBridgedSuggestionsRetriesAnUnreachedGateway(t *testing.T) {
+	const owner = "owner-1"
+	inner := func([]byte, warpnet.WarpStream) (any, error) { return nil, nil }
+	calls := 0
+	streamer := stubUserStreamer{
+		nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+		genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+			calls++
+			return nil, errors.New("node is offline")
+		},
+	}
+	h := WithBridgedSuggestions(inner, stubUserFetcher{}, streamer)
+	_, _ = h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+	_, _ = h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+	require.Equal(t, 1, calls, "a failed refresh waits for the retry interval")
 }
