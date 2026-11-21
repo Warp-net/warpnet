@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -128,7 +128,13 @@ func StreamGetUserHandler(
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
 			log.Warnf("get other user from db: %v - %s", err, ev.UserId)
-			fetchedUser, fetchErr := updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
+			nodeId := ev.NodeId
+			if nodeId == "" && bridge.IsBridgedUserID(ev.UserId) {
+				// An author seen only inside another post, such as a repost,
+				// comes with no node hint; a bridged one lives on the gateway.
+				nodeId = bridge.GatewayNodeID()
+			}
+			fetchedUser, fetchErr := updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: nodeId}, streamer)
 			if fetchErr != nil || fetchedUser.Username == "" {
 				return nil, fmt.Errorf("get user: other user %w", err)
 			}
@@ -203,7 +209,7 @@ func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {
 			return nil, err
 		}
 
-		return event.SearchUsersResponse{Cursor: cur, Users: slices.DeleteFunc(users, fediverse.IsFederatedWarpnet)}, nil
+		return event.SearchUsersResponse{Cursor: cur, Users: slices.DeleteFunc(users, bridge.IsFederatedWarpnet)}, nil
 	}
 }
 
@@ -231,7 +237,7 @@ func StreamGetUsersHandler(
 
 			return event.UsersResponse{
 				Cursor: cursor,
-				Users:  slices.DeleteFunc(users, fediverse.IsFederatedWarpnet),
+				Users:  slices.DeleteFunc(users, bridge.IsFederatedWarpnet),
 			}, nil
 		}
 
@@ -241,7 +247,7 @@ func StreamGetUsersHandler(
 
 		return event.UsersResponse{
 			Cursor: cursor,
-			Users:  slices.DeleteFunc(users, fediverse.IsFederatedWarpnet),
+			Users:  slices.DeleteFunc(users, bridge.IsFederatedWarpnet),
 		}, nil
 	}
 }
@@ -253,7 +259,7 @@ func refreshUsers(
 ) {
 	ownNodeInfo := streamer.NodeInfo()
 	if ownNodeInfo.OwnerId == ev.UserId {
-		gatewayNodeId := fediverse.GatewayNodeID()
+		gatewayNodeId := bridge.GatewayNodeID()
 		users, err := requestUsers(streamer, gatewayNodeId, event.PUBLIC_GET_WHOTOFOLLOW, ev)
 		if err != nil {
 			log.Errorf("get users handler: fediverse users: %v", err)

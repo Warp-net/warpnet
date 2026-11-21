@@ -72,7 +72,7 @@ export default {
         { name: 'SettingsMutes', label: 'Muted users', hint: 'Users you have muted', icon: 'fas fa-volume-mute' },
         { name: 'SettingsFilters', label: 'Filters', hint: 'Hide tweets matching keywords', icon: 'fas fa-filter' },
         { name: 'SettingsNotifications', label: 'Email notifications', hint: 'Send notifications to your email', icon: 'fas fa-envelope' },
-        { name: 'SettingsGateway', label: 'Fediverse gateway', hint: 'ActivityPub gateway node id', icon: 'fas fa-network-wired' },
+        { name: 'SettingsGateway', label: 'Bridge gateway', hint: 'Bridge gateway node id', icon: 'fas fa-network-wired' },
         { name: 'SettingsSponsored', label: 'Sponsored tweets', hint: 'Staked TRX your buyers must hold', icon: 'fas fa-pepper-hot' },
         { name: 'SettingsRateLimiting', label: 'Rate limiting', hint: 'Network, discovery and stream limits', icon: 'fas fa-tachometer-alt' },
         { name: 'SettingsNetwork', label: 'Network', hint: 'Listen address and bootstrap peers', icon: 'fas fa-server' },

@@ -2,9 +2,12 @@ package handler
 
 import (
 	"errors"
+	"github.com/Warp-net/warpnet/core/bridge"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"testing"
 )
 
@@ -12,7 +15,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	owner := "owner-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -20,7 +23,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -45,6 +48,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			stubUserFollowsCounter{getFollowingsFn: func(userId string, limit *uint64, cursor *string) ([]string, string, error) {
 				return []string{"already-followed"}, "", nil
 			}},
+			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -71,6 +75,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 				},
 			},
 			stubUserFollowsCounter{},
+			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -98,6 +103,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 				},
 			},
 			stubUserFollowsCounter{},
+			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -113,15 +119,33 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
 			return nil, "", repoErr
-		}}, stubUserFollowsCounter{})
+		}}, stubUserFollowsCounter{}, stubUserStreamer{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
 	})
 
+	t.Run("owner's first page asks the gateway for bridged suggestions", func(t *testing.T) {
+		asked := make(chan string, 1)
+		streamer := stubUserStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+			genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+				asked <- nodeId
+				return json.Marshal(event.UsersResponse{})
+			},
+		}
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, streamer)
+		if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got := <-asked; got != bridge.GatewayNodeID() {
+			t.Fatalf("asked %s, want the gateway", got)
+		}
+	})
+
 	t.Run("empty results", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)

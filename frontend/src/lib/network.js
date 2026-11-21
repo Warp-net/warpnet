@@ -29,11 +29,12 @@ const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 const WARPNET_NETWORKS = ['warpnet', 'testnet', 'mainnet'];
 
 // The foreign networks the ActivityPub gateway bridges in. The node tags every
-// bridged account and post with one (core/fediverse), and the tag is what the
+// bridged account and post with one (core/bridge), and the tag is what the
 // UI keys its icon, badge and reply policy off — never the instance host, which
 // is per-account.
 export const NETWORK_MASTODON = 'mastodon';
 export const NETWORK_THREADS = 'threads';
+export const NETWORK_NOSTR = 'nostr';
 
 // networkOf names the foreign network behind a tag, '' for a native Warpnet
 // one. Rows cached before the tag existed carry none, so it falls back to the
@@ -62,6 +63,30 @@ export function bridgedNetwork(user) {
 
 export function tweetNetwork(tweet) {
     return tweet ? networkOf(tweet.network, tweet.user_id) : '';
+}
+
+// The sections every listing offers, then one per other bridged network that
+// shows up: a network the client does not know still gets its own section.
+const KNOWN_SECTIONS = [
+    {key: 'warpnet', label: 'Warpnet', network: ''},
+    {key: NETWORK_MASTODON, label: 'Mastodon', network: NETWORK_MASTODON},
+    {key: NETWORK_THREADS, label: 'Threads', network: NETWORK_THREADS},
+];
+
+// sectionKey is the section a profile belongs in.
+export function sectionKey(profile) {
+    return bridgedNetwork(profile) || 'warpnet';
+}
+
+export function networkSections(profiles) {
+    const out = KNOWN_SECTIONS.map((s) => ({...s}));
+    for (const p of profiles || []) {
+        const key = sectionKey(p);
+        if (!out.some((s) => s.key === key)) {
+            out.push({key, label: key.charAt(0).toUpperCase() + key.slice(1), network: key});
+        }
+    }
+    return out;
 }
 
 export function isBridgedUser(user) {
@@ -151,4 +176,20 @@ const PRODUCTION_NETWORKS = ['warpnet', 'mainnet'];
 // unknown value warns rather than stays silent.
 export function isExperimentalNetwork(network) {
     return !PRODUCTION_NETWORKS.includes((network || '').trim().toLowerCase());
+}
+
+// A Nostr account's id is its 63-character npub on a fixed domain; lists show
+// "npub1abcdef…wxyz" instead. fallbackLen, when given, clips any other id the
+// same way short rows always did.
+const NPUB_RE = /^(npub1[02-9ac-hj-np-z]{58})(@[^@]+)?$/i;
+
+export function shortHandle(id, fallbackLen) {
+    const m = NPUB_RE.exec(id || '');
+    if (m) {
+        return `${m[1].slice(0, 11)}…${m[1].slice(-4)}`;
+    }
+    if (fallbackLen && id && id.length > fallbackLen) {
+        return `${id.slice(0, fallbackLen)}...`;
+    }
+    return id || '';
 }

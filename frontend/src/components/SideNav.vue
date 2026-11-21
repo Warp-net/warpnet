@@ -33,21 +33,21 @@ resulting from the use or misuse of this software.
 
   <!-- Mobile bottom tab bar (visible below sm breakpoint, <360px per tailwind.config.js) -->
   <nav class="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-lighter flex justify-around items-center py-2 sm:hidden" role="navigation" aria-label="Mobile navigation">
-    <button @click="open('Home')" :class="$route.name === 'Home' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 flat-btn" aria-label="Home">
+    <button @click="open('Home')" :class="$route.name === 'Home' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 flat-btn" aria-label="Home" data-tour="nav-home">
       <i class="fa fa-home text-xl" aria-hidden="true"></i>
       <span class="text-xs mt-0.5">Home</span>
     </button>
-    <button @click="open('Notifications')" :class="$route.name === 'Notifications' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 relative flat-btn" aria-label="Notifications">
+    <button @click="open('Notifications')" :class="$route.name === 'Notifications' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 relative flat-btn" aria-label="Notifications" data-tour="nav-notifications">
       <i class="fa-bell text-xl" :class="$route.name === 'Notifications' ? 'fas' : 'far'" aria-hidden="true"></i>
       <span v-if="newNotifications > 0" class="absolute -top-0.5 right-0 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-blue text-white">{{ newNotifications }}</span>
       <span class="text-xs mt-0.5">Alerts</span>
     </button>
-    <button @click="open('Chats')" :class="$route.name === 'Chats' || $route.name === 'Messages' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 relative flat-btn" aria-label="Messages">
+    <button @click="open('Chats')" :class="$route.name === 'Chats' || $route.name === 'Messages' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 relative flat-btn" aria-label="Messages" data-tour="nav-messages">
       <i class="fa-envelope text-xl" :class="$route.name === 'Chats' || $route.name === 'Messages' ? 'fas' : 'far'" aria-hidden="true"></i>
       <span v-if="newMessages > 0" class="absolute -top-0.5 right-0 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-blue text-white">{{ newMessages }}</span>
       <span class="text-xs mt-0.5">Chats</span>
     </button>
-    <button @click="open('Profile')" :class="$route.name === 'Profile' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 flat-btn" aria-label="Profile">
+    <button @click="open('Profile')" :class="$route.name === 'Profile' ? 'text-blue' : 'text-dark'" class="flex flex-col items-center p-2 flat-btn" aria-label="Profile" data-tour="nav-profile">
       <i class="fa-user text-xl" :class="$route.name === 'Profile' ? 'fas' : 'far'" aria-hidden="true"></i>
       <span class="text-xs mt-0.5">Profile</span>
     </button>
@@ -72,6 +72,7 @@ resulting from the use or misuse of this software.
           :class="{ 'nav-active': $route.name === 'Home' }"
           class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Home"
+          data-tour="nav-home"
         >
           <i
             class="fa fa-home"
@@ -90,6 +91,7 @@ resulting from the use or misuse of this software.
           :class="{ 'nav-active': $route.name === 'Notifications' }"
           class="relative max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Notifications"
+          data-tour="nav-notifications"
         >
           <i
             class="fa-bell"
@@ -117,6 +119,7 @@ resulting from the use or misuse of this software.
           :class="{ 'nav-active': $route.name === 'Chats' || $route.name === 'Messages' }"
           class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Messages"
+          data-tour="nav-messages"
         >
           <i
             class="fa-envelope"
@@ -142,6 +145,7 @@ resulting from the use or misuse of this software.
           :class="{ 'nav-active': $route.name === 'Bookmarks' }"
           class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Bookmarks"
+          data-tour="nav-bookmarks"
         >
           <i
             class="fa-bookmark"
@@ -161,6 +165,7 @@ resulting from the use or misuse of this software.
           :class="{ 'nav-active': $route.name === 'Wallet' }"
           class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Wallet"
+          data-tour="nav-wallet"
         >
           <i
             class="fas fa-wallet"
@@ -187,6 +192,7 @@ resulting from the use or misuse of this software.
           :class="{ 'nav-active': $route.name === 'Profile' }"
           class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Profile"
+          data-tour="nav-profile"
         >
           <i
             class="fa-user"
@@ -205,6 +211,7 @@ resulting from the use or misuse of this software.
           :class="{ 'nav-active': $route.name && $route.name.startsWith('Settings') }"
           class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Settings"
+          data-tour="nav-settings"
         >
           <i
             class="text-xl fas fa-cog"
@@ -222,13 +229,14 @@ resulting from the use or misuse of this software.
 
       <button
         @click="openTweetCompose()"
+        data-tour="tweet-button"
         class="text-white bg-blue rounded-full font-semibold h-12 lg:h-auto w-12 xl:w-full hover:bg-darkblue p-3 overflow-hidden whitespace-nowrap text-ellipsis"
       >
         <p class="hidden xl:block truncate">Tweet</p>
         <i class="fas fa-plus xl:hidden"></i>
       </button>
     </div>
-    <div v-if="profile" ref="accountMenu" class="xl:w-full relative mt-2 w-10 h-10">
+    <div v-if="profile" ref="accountMenu" class="xl:w-full relative mt-2 w-10 h-10" data-tour="account-menu">
       <button
         @click="dropdown = !dropdown"
         class="flex items-center w-full hover:bg-lightblue rounded-full"
@@ -277,6 +285,12 @@ resulting from the use or misuse of this software.
           Toggle Theme
         </button>
         <button
+          @click="replayTour"
+          class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm"
+        >
+          Take the tour
+        </button>
+        <button
           @click="signInByQR"
           class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm"
         >
@@ -298,6 +312,7 @@ resulting from the use or misuse of this software.
 <script>
 import QRCodeModal from "@/components/QRCodeModal.vue";
 import {warpnetService} from "@/service/service";
+import {startOnboarding} from "@/lib/onboarding";
 
 const walletPollEvery = 60000;
 const walletAssets = ["USDT", "TRX"];
@@ -446,6 +461,14 @@ export default {
         html.classList.add("dark");
         localStorage.setItem("theme", "dark");
       }
+    },
+    // The composer, node info and right-bar tips live on Home, so the replay starts there.
+    replayTour() {
+      this.dropdown = false;
+      if (this.$route.name !== 'Home') {
+        this.$router.push({ name: 'Home' });
+      }
+      startOnboarding();
     },
     signInByQR() {
         // warpnetService.getQR() is a synchronous in-memory lookup,

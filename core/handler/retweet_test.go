@@ -4,6 +4,7 @@ package handler
 import (
 	"errors"
 	"math/big"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -690,8 +691,12 @@ func TestEditOfSelfRetweetedTweetKeepsTheTweet(t *testing.T) {
 	rt := owner
 	source := original
 	source.RetweetedBy = &rt
-	if _, err := tweetRepo.NewRetweet(source, true); err != nil {
+	retweet, err := tweetRepo.NewRetweet(source, true)
+	if err != nil {
 		t.Fatalf("retweet: %v", err)
+	}
+	if err := timelineRepo.AddTweetToTimeline(owner, retweet); err != nil {
+		t.Fatalf("timeline: %v", err)
 	}
 
 	edit := StreamEditTweetHandler(tweetRepo, timelineRepo, nil, nil)
@@ -708,6 +713,9 @@ func TestEditOfSelfRetweetedTweetKeepsTheTweet(t *testing.T) {
 	}
 	if _, err := tweetRepo.Get(owner, domain.RetweetPrefix+original.Id); !errors.Is(err, database.ErrTweetNotFound) {
 		t.Fatalf("expected the self-retweet cancelled, got %v", err)
+	}
+	if ids := timelineIds(t, timelineRepo, owner); slices.Contains(ids, retweet.Id) {
+		t.Fatalf("expected the cancelled retweet gone from the timeline, got %v", ids)
 	}
 	if count, err := tweetRepo.RetweetsCount(original.Id); err != nil || count != 0 {
 		t.Fatalf("expected 0 retweets, got %d (%v)", count, err)

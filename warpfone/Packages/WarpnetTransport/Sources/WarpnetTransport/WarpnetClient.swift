@@ -17,6 +17,9 @@ public actor WarpnetClient {
   private var controlWaiters: [CheckedContinuation<Void, Never>] = []
   private var isPaused = false
 
+  public nonisolated let unpaired: AsyncStream<Void>
+  private let unpairedContinuation: AsyncStream<Void>.Continuation
+
   public init(binding: WarpnetBinding,
               nodeLogSink: NodeLogSink? = nil,
               retryBackoffs: [Duration] = WarpnetClient.defaultRetryBackoffs)
@@ -24,6 +27,7 @@ public actor WarpnetClient {
     self.binding = binding
     self.nodeLogSink = nodeLogSink
     self.retryBackoffs = retryBackoffs
+    (unpaired, unpairedContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
   }
 
   public func initialise(_ config: WarpnetConfig) async throws {
@@ -143,6 +147,9 @@ public actor WarpnetClient {
       do {
         return try await attempt()
       } catch let error as WarpnetError {
+        if error.isUnknownClientPeer {
+          unpairedContinuation.yield()
+        }
         guard retries < retryBackoffs.count, Self.isRetryable(error) else { throw error }
         try await Task.sleep(for: retryBackoffs[retries])
         retries += 1

@@ -1,0 +1,1 @@
+"use strict";(self["webpackChunkwarpnet_frontend"]=self["webpackChunkwarpnet_frontend"]||[]).push([[5852],{5852:function(n,e,t){n.exports=t.p+"img/logo-transparent.5725c2f3.png"}}]);

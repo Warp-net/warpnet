@@ -214,7 +214,7 @@ resulting from the use or misuse of this software.
               class="ml-3 text-left flat-btn"
             >
               <p class="font-bold">{{ r.username || r.id }}</p>
-              <p class="text-dark text-sm">@{{ r.id }}</p>
+              <p class="text-dark text-sm">@{{ shortHandle(r.id) }}</p>
             </button>
             <div class="ml-auto flex gap-2">
               <button
@@ -246,6 +246,7 @@ import {defineAsyncComponent} from "vue";
 import SideNav from "../components/SideNav.vue";
 import DefaultRightBar from "../components/DefaultRightBar.vue";
 import {warpnetService} from "@/service/service";
+import {shortHandle} from "@/lib/network";
 import {toast} from "@/lib/toast";
 
 const TYPE_FILTERS = [
@@ -333,6 +334,7 @@ export default {
     },
   },
   methods: {
+    shortHandle,
     gotoHome() {
       if (window.history.length > 1) {
         this.$router.back();

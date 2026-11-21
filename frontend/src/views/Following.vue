@@ -39,7 +39,7 @@ resulting from the use or misuse of this software.
           <div class="lg:block ml-4">
             <h1 class="text-xl font-bold">{{ profile?.username }}</h1>
             <p class="text-left text-sm leading-tight text-dark">
-              @{{ profile?.id }}
+              @{{ shortHandle(profile?.id) }}
             </p>
           </div>
         </div>
@@ -84,6 +84,7 @@ import SearchBar from "../components/SearchBar.vue";
 import Users from "../components/Users.vue";
 import Loader from "../components/Loader.vue";
 import {warpnetService} from "@/service/service";
+import {shortHandle} from "@/lib/network";
 
 export default {
   name: "Following",
@@ -102,6 +103,7 @@ export default {
     };
   },
   methods: {
+    shortHandle,
     gotoProfile() {
       this.$router.push({
         name: "Profile",

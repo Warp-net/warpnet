@@ -32,12 +32,12 @@ import (
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
 	ratingdb "github.com/Warp-net/warpnet/core/crdt/rating"
 	"github.com/Warp-net/warpnet/core/crdt/stats"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
-	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/middleware"
@@ -111,12 +111,18 @@ func NewMemberNode(
 	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
+	aliases, _ := aliasesRepo.GetAliases()
+	for _, alias := range aliases {
+		if err := aliasesRepo.DeleteAlias(alias.NodeId); err != nil {
+			return nil, err
+		}
+	}
 	owner := authRepo.GetOwner()
 
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to
 	// the built-in default) before seeding the entry user and starting discovery.
 	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(); err == nil {
-		fediverse.SetGatewayNodeID(gw.NodeID)
+		bridge.SetGatewayNodeID(gw.NodeID)
 	}
 
 	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings()
@@ -146,7 +152,7 @@ func NewMemberNode(
 	}
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
-	fediverse.SeedEntryUser(database.NewUserRepo(db))
+	bridge.SeedEntryUser(database.NewUserRepo(db))
 
 	notifier := notifications.New(
 		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),
@@ -334,7 +340,7 @@ func fetchFollowingIds(ownerId string, followRepo FollowStorer, userRepo UserPro
 		}
 		for _, u := range users {
 			// bridged networks never publish to the gossip topic
-			if u.Id == ownerId || fediverse.IsBridged(u.Network) {
+			if u.Id == ownerId || bridge.IsBridged(u.Network) {
 				continue
 			}
 			ids = append(ids, u.Id)
@@ -969,7 +975,7 @@ func (m *MemberNode) userHandlers(
 		},
 		{
 			event.PUBLIC_GET_WHOTOFOLLOW,
-			handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo),
+			handler.StreamGetWhoToFollowHandler(authRepo, userRepo, followRepo, m),
 		},
 		{
 			event.PRIVATE_POST_USER,

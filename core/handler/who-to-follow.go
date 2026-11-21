@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -14,19 +14,15 @@ type WhoToFollowAuthStorer interface {
 	GetOwner() domain.Owner
 }
 
-type WhoToFollowUserFetcher interface {
-	Get(userId string) (user domain.User, err error)
-	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
-}
-
 type WhoToFollowFollowsLister interface {
 	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 func StreamGetWhoToFollowHandler(
 	authRepo WhoToFollowAuthStorer,
-	userRepo WhoToFollowUserFetcher,
+	userRepo UserFetcher,
 	followRepo WhoToFollowFollowsLister,
+	streamer UserStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
@@ -37,6 +33,11 @@ func StreamGetWhoToFollowHandler(
 
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
+		}
+
+		// Bridged accounts reach this node only from the gateway's suggestions.
+		if ev.UserId == streamer.NodeInfo().OwnerId && (ev.Cursor == nil || *ev.Cursor == "") {
+			go refreshUsers(userRepo, ev, streamer)
 		}
 
 		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
@@ -74,7 +75,7 @@ func StreamGetWhoToFollowHandler(
 			if user.IsOffline { // exclude offline
 				continue
 			}
-			if fediverse.IsFederatedWarpnet(user) {
+			if bridge.IsFederatedWarpnet(user) {
 				continue
 			}
 
@@ -89,7 +90,7 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if user.NodeId != "" && !fediverse.IsBridged(user.Network) {
+			if user.NodeId != "" && !bridge.IsBridged(user.Network) {
 				if idx, ok := latestByNode[user.NodeId]; ok {
 					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
 						whotofollow[idx] = user

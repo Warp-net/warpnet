@@ -39,6 +39,7 @@ resulting from the use or misuse of this software.
             @click="toggleInfo"
             class="text-xl text-blue cursor-pointer hover:bg-lighter rounded-full w-9 h-9 flex items-center justify-center"
             aria-label="Show node info"
+            data-tour="node-info"
             type="button"
         >
           <i class="fas fa-info-circle" aria-hidden="true"></i>
@@ -56,7 +57,7 @@ resulting from the use or misuse of this software.
             class="flex-none w-12 h-12 rounded-full object-cover bg-transparent"
           />
         </div>
-        <div class="w-full">
+        <div class="w-full" data-tour="compose">
           <label for="compose-tweet" class="sr-only">Compose a tweet</label>
           <textarea
             id="compose-tweet"
@@ -174,7 +175,7 @@ resulting from the use or misuse of this software.
             </div>
           </div>
           <div class="flex items-center justify-between border-t border-lighter pt-2">
-            <div class="flex items-center">
+            <div class="flex items-center" data-tour="compose-tools">
               <button
                   @click="openFileInput('imageUrlFileInput')"
                   class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
@@ -295,6 +296,7 @@ resulting from the use or misuse of this software.
         </p>
         <button
           @click="showImportModal = true"
+          data-tour="import"
           class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
         >
           <p class="hidden lg:block">Import tweets from X</p>
@@ -337,6 +339,7 @@ import {byteLength, clampBytes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {pastedFiles} from "@/lib/clipboard";
 import {createTimelineMerger} from "@/lib/unified-timeline";
 import {isBridgedTweet, isBridgedUser, isOwnTweetEcho} from "@/lib/network";
+import {startQueuedOnboarding} from "@/lib/onboarding";
 
 const tweetByteLimit = 2048;
 // Bridged sources are polled much slower than the 10s local-timeline poll:
@@ -1014,6 +1017,7 @@ export default {
     } finally {
       this.loading = false;
     }
+    this.$nextTick(startQueuedOnboarding);
 
     this._timelineTimer = setInterval(() => this.refreshTimeline(), 10000);
 

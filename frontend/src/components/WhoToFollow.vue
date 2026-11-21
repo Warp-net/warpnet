@@ -22,16 +22,16 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div class="w-full rounded-lg bg-lightest my-4">
+  <!-- The right bar is as wide as its content, so every row has one fixed
+       width (name block, button) and an empty tab is held to it: switching
+       networks must not resize the column and shift the feed. -->
+  <div class="w-full lg:min-w-[23rem] rounded-lg bg-lightest my-4" data-tour="who-to-follow">
     <div class="p-3 flex items-center">
       <p class="text-lg font-bold">Who to follow</p>
     </div>
-    <!-- One block, one tab per network: Warpnet first because it is the network
-         the user is actually on; the bridged ones are a step outside it.
-         Separated pills rather than underlined cells — an underline alone left
-         the three labels reading as one run-on line, and a filled active pill
-         is the one state that survives both themes without a new colour, since
-         bg-lighter is what the dark theme already remaps. -->
+    <!-- One block, one icon tab per network: Warpnet first because it is the
+         network the user is actually on. Labels show on hover only, so the row
+         fits however many networks are bridged. -->
     <div class="flex gap-1 px-2 py-2 border-t border-lighter" role="tablist">
       <button
         v-for="tab in tabs"
@@ -39,15 +39,15 @@ resulting from the use or misuse of this software.
         type="button"
         role="tab"
         :aria-selected="tab.key === activeTab"
-        :title="tab.label"
+        :aria-label="tab.label"
         @click="activeTab = tab.key"
-        :class="['flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-full text-xs transition-colors flat-btn',
+        :class="['group relative flex-1 min-w-0 flex items-center justify-center px-2 py-1.5 rounded-full text-xs transition-colors flat-btn',
                  tab.key === activeTab
                    ? 'bg-lighter text-blue font-bold ring-1 ring-[color:var(--gd-trim)]'
                    : 'text-dark hover:bg-lighter']"
       >
         <NetworkIcon :network="tab.network" size-class="w-4 h-4 shrink-0" />
-        <span class="truncate">{{ tab.label }}</span>
+        <span class="pointer-events-none absolute top-full mt-1 z-10 whitespace-nowrap rounded bg-lighter px-2 py-0.5 text-xs text-dark ring-1 ring-[color:var(--gd-trim)] opacity-0 group-hover:opacity-100 transition-opacity">{{ tab.label }}</span>
       </button>
     </div>
     <div v-for="profile in activeProfiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
@@ -60,15 +60,15 @@ resulting from the use or misuse of this software.
         />
         <UserStatusDot :user="profile" />
       </div>
-      <div class="hidden lg:block ml-4 min-w-0">
+      <div class="hidden lg:block ml-4 w-[9rem] flex-none">
         <p @click="pushToProfilePage(profile.id)" class="text-left text-sm font-bold leading-tight cursor-pointer truncate max-w-[9rem]">{{ profile.username }}</p>
-        <p class="text-left text-sm leading-tight text-dark truncate max-w-[9rem]">{{ profile.id.slice(0, 8) }}...</p>
+        <p class="text-left text-sm leading-tight text-dark truncate max-w-[9rem]" :title="profile.id">{{ shortHandle(profile.id, 8) }}</p>
       </div>
       <button
         v-if="!isFollowing(profile.id)"
         @click="follow(profile.id)"
         :disabled="isPending(profile.id)"
-        class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2 disabled:opacity-50"
+        class="ml-auto w-[6.5rem] flex-none text-sm text-blue font-bold py-1 rounded-full border border-blue m-2 disabled:opacity-50"
       >
         Follow
       </button>
@@ -76,7 +76,7 @@ resulting from the use or misuse of this software.
           v-if="isFollowing(profile.id)"
           @click="unfollow(profile.id)"
           :disabled="isPending(profile.id)"
-          class="ml-auto text-sm font-bold px-4 py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
+          class="ml-auto w-[6.5rem] flex-none text-sm font-bold py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
       >
         <span class="group-hover:hidden">Following</span>
         <span class="hidden group-hover:inline">Unfollow</span>
@@ -97,7 +97,7 @@ resulting from the use or misuse of this software.
 <script>
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {bridgedNetwork, NETWORK_MASTODON, NETWORK_THREADS} from "@/lib/network";
+import {networkSections, sectionKey, shortHandle} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 
@@ -110,9 +110,7 @@ export default {
   data() {
     return {
       activeTab: 'warpnet',
-      warpnetProfiles: [],
-      mastodonProfiles: [],
-      threadsProfiles: [],
+      groups: {warpnet: [], mastodon: [], threads: []},
       followingStatus: new Map(),
       pending: new Set(),
     };
@@ -121,17 +119,14 @@ export default {
     // Every tab is always offered, empty or not: a tab that appears only once
     // it has content hides the fact that the other networks exist at all.
     tabs() {
-      return [
-        {key: 'warpnet', label: 'Warpnet', network: ''},
-        {key: 'mastodon', label: 'Mastodon', network: NETWORK_MASTODON},
-        {key: 'threads', label: 'Threads', network: NETWORK_THREADS},
-      ];
+      return networkSections(Object.values(this.groups).flat());
     },
     activeProfiles() {
       return this.groupOf(this.activeTab);
     },
   },
   methods: {
+    shortHandle,
     async pushToProfilePage(profileId) {
       this.$router.push({
         name: "Profile",
@@ -140,15 +135,14 @@ export default {
         }
       });
     },
-    // groupOf / groupFor keep the three buckets in one place: the tab key on
-    // one side, the network tag a profile carries on the other.
+    // groupOf / groupFor keep one bucket per network: the tab key on one
+    // side, the network tag a profile carries on the other.
     groupOf(key) {
-      if (key === 'mastodon') return this.mastodonProfiles;
-      if (key === 'threads') return this.threadsProfiles;
-      return this.warpnetProfiles;
+      if (!this.groups[key]) this.groups[key] = [];
+      return this.groups[key];
     },
     groupFor(profile) {
-      return this.groupOf(bridgedNetwork(profile) || 'warpnet');
+      return this.groupOf(sectionKey(profile));
     },
     isFollowing(profileId) {
       return this.followingStatus.get(profileId) || false
@@ -220,13 +214,11 @@ export default {
           group.push(p);
         }
       }
-      if (this.warpnetProfiles.length >= sectionLimit
-          && this.mastodonProfiles.length >= sectionLimit
-          && this.threadsProfiles.length >= sectionLimit) {
+      if (Object.values(this.groups).every((g) => g.length >= sectionLimit)) {
         break;
       }
     }
-    const profiles = [...this.warpnetProfiles, ...this.mastodonProfiles, ...this.threadsProfiles];
+    const profiles = Object.values(this.groups).flat();
     this.loadAvatars(profiles);
     for (const p of profiles) {
       const status = await warpnetService.isFollowing(p.id);

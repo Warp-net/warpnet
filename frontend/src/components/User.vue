@@ -42,7 +42,7 @@ resulting from the use or misuse of this software.
           <p v-else>
             <p class="font-bold">Moderated</p>
           </p>
-          <p class="text-dark text-sm">@{{ user.id }}</p>
+          <p class="text-dark text-sm">@{{ shortHandle(user.id) }}</p>
         </div>
         <div v-if="profile && profile.user_id !== user.id" class="relative flex items-center">
           <button
@@ -107,7 +107,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
-import {decodeHtmlEntities, isBridgedUser} from "@/lib/network";
+import {decodeHtmlEntities, isBridgedUser, shortHandle} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
@@ -144,6 +144,7 @@ export default {
     },
   },
   methods: {
+    shortHandle,
     isFollowing() {
       return this.followingStatus.get(this.user.id) || false
     },

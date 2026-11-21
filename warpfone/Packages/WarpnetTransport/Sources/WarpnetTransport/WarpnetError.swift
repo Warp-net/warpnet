@@ -17,6 +17,11 @@ public enum WarpnetError: Error, Equatable, Sendable {
     return false
   }
 
+  public var isUnknownClientPeer: Bool {
+    guard case let .protocolError(_, message) = self else { return false }
+    return message.lowercased().contains("unknown client peer")
+  }
+
   public var isDurablePairRejection: Bool {
     guard case let .protocolError(_, message) = self else { return false }
     let lowered = message.lowercased()

@@ -33,7 +33,7 @@ import (
 	"strings"
 
 	"github.com/Warp-net/warpnet/core/authorship"
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -179,7 +179,7 @@ func StreamFollowHandler(
 		}
 
 		// bridged networks never publish to the gossip topic
-		if !fediverse.IsBridged(followingUser.Network) {
+		if !bridge.IsBridged(followingUser.Network) {
 			if err := broadcaster.SubscribeUserUpdate(ev.FollowingId); err != nil {
 				return nil, err
 			}
@@ -308,7 +308,7 @@ func StreamUnfollowHandler(
 			return nil, err
 		}
 
-		if !fediverse.IsBridged(followingUser.Network) {
+		if !bridge.IsBridged(followingUser.Network) {
 			if err := broadcaster.UnsubscribeUserUpdate(ev.FollowingId); err != nil {
 				log.Infoln("unfollow unsubscribe:", err)
 			}

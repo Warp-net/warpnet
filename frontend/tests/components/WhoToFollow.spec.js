@@ -23,7 +23,7 @@ const threadsUser = (n) => ({ id: `user${n}@threads.net`, username: `thr${n}`, n
 
 // The tabs carry their label as the button title; the icon inside carries the
 // aria-label, so the title is what addresses the tab itself.
-const openTab = (label) => fireEvent.click(screen.getByTitle(label));
+const openTab = (label) => fireEvent.click(screen.getByRole('tab', { name: label }));
 
 const renderComponent = () =>
   render(WhoToFollow, {
@@ -60,9 +60,9 @@ describe('WhoToFollow.vue (sidebar)', () => {
     // One block, three tabs, Warpnet showing by default.
     expect(await screen.findByText('warp1')).toBeInTheDocument();
     expect(screen.getAllByText('Who to follow')).toHaveLength(1);
-    expect(screen.getByTitle('Warpnet')).toBeInTheDocument();
-    expect(screen.getByTitle('Mastodon')).toBeInTheDocument();
-    expect(screen.getByTitle('Threads')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Warpnet' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Mastodon' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Threads' })).toBeInTheDocument();
     expect(screen.getByText('warp2')).toBeInTheDocument();
     expect(screen.queryByText('masto1')).not.toBeInTheDocument();
     expect(screen.queryByText('thr1')).not.toBeInTheDocument();
@@ -78,6 +78,21 @@ describe('WhoToFollow.vue (sidebar)', () => {
       expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(2, false, 10);
     });
     expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(1, true, 10);
+  });
+
+  it('gives a network the client does not know its own tab', async () => {
+    const other = { id: 'bob@bsky.social', username: 'other1', network: 'bluesky' };
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce([warpnetUser(1), other])
+      .mockResolvedValueOnce([]);
+
+    renderComponent();
+
+    expect(await screen.findByText('warp1')).toBeInTheDocument();
+    expect(screen.queryByText('other1')).not.toBeInTheDocument(); // not under Warpnet
+    await openTab('Bluesky');
+    expect(await screen.findByText('other1')).toBeInTheDocument();
+    expect(screen.queryByText('warp1')).not.toBeInTheDocument();
   });
 
   it('keeps paging until each tab is filled, capping each at 5', async () => {
@@ -104,7 +119,7 @@ describe('WhoToFollow.vue (sidebar)', () => {
     expect(await screen.findByText('warp1')).toBeInTheDocument();
     // A tab that appeared only once it had content would hide the fact that the
     // other networks exist at all, so it stays and says it is empty.
-    expect(screen.getByTitle('Threads')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Threads' })).toBeInTheDocument();
     await openTab('Threads');
     expect(await screen.findByText('Nobody to suggest here yet.')).toBeInTheDocument();
   });

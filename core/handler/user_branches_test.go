@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -68,6 +68,23 @@ func TestStreamGetUserHandlerBranches(t *testing.T) {
 		_, err := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, repo, auth, streamer)(
 			marshal(t, event.GetUserEvent{UserId: "other-1", NodeId: "other-node"}), nil)
 		require.Error(t, err)
+	})
+
+	t.Run("unknown bridged user without a node hint is asked of the gateway", func(t *testing.T) {
+		repo := stubUserFetcher{getFn: func(string) (domain.User, error) {
+			return domain.User{}, database.ErrUserNotFound
+		}}
+		var asked string
+		streamer := stubUserStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			asked = nodeId
+			return json.Marshal(domain.User{Id: "npub1abc@nostr.com", Username: "ed", NodeId: bridge.GatewayNodeID()})
+		}}
+
+		out, err := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, repo, auth, streamer)(
+			marshal(t, event.GetUserEvent{UserId: "npub1abc@nostr.com"}), nil)
+		require.NoError(t, err)
+		require.Equal(t, bridge.GatewayNodeID(), asked)
+		require.Equal(t, "ed", out.(domain.User).Username)
 	})
 
 	t.Run("user hosted on this node is returned as-is", func(t *testing.T) {
@@ -157,11 +174,11 @@ func TestRefreshUsers(t *testing.T) {
 		}}
 		ownerEv := event.GetAllUsersEvent{UserId: selfInfo.OwnerId}
 		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-			require.Equal(t, fediverse.GatewayNodeID(), nodeId)
+			require.Equal(t, bridge.GatewayNodeID(), nodeId)
 			require.Equal(t, stream.WarpRoute(event.PUBLIC_GET_WHOTOFOLLOW), path)
 			require.Equal(t, ownerEv, data)
 			return json.Marshal(event.UsersResponse{Users: []domain.User{
-				{Id: "alice@mastodon.social", NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork},
+				{Id: "alice@mastodon.social", NodeId: bridge.GatewayNodeID(), Network: bridge.MastodonNetwork},
 			}})
 		}}
 		refreshUsers(repo, ownerEv, streamer)

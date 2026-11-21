@@ -50,6 +50,7 @@ resulting from the use or misuse of this software.
            login, and everything except production is throwaway. -->
       <div
         v-if="showNetworkBanner"
+        data-tour="network"
         class="flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium text-white bg-blue"
         role="status"
       >
@@ -70,6 +71,7 @@ resulting from the use or misuse of this software.
       @cancel="isUpdateInstallable ? answerUpdate(false) : dismissUpdate()"
     />
     <ToastHost />
+    <OnboardingTour />
   </div>
 </template>
 
@@ -82,6 +84,7 @@ import {isExperimentalNetwork} from "@/lib/network";
 import {toast} from "@/lib/toast";
 import ToastHost from "@/components/ToastHost.vue";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
+import OnboardingTour from "@/components/OnboardingTour.vue";
 
 const DEEP_LINK_EVENT = "deeplink:open";
 const LOG = "[warpnet-deeplink]";
@@ -98,7 +101,7 @@ function dismissedUpdate() {
 
 export default {
   name: "App",
-  components: { ToastHost, ConfirmDialog },
+  components: { ToastHost, ConfirmDialog, OnboardingTour },
   data() {
     return {
       connection,
