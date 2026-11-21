@@ -22,7 +22,10 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div class="w-full rounded-lg bg-lightest my-4" data-tour="who-to-follow">
+  <!-- The right bar is as wide as its content, so every row has one fixed
+       width (name block, button) and an empty tab is held to it: switching
+       networks must not resize the column and shift the feed. -->
+  <div class="w-full lg:min-w-[23rem] rounded-lg bg-lightest my-4" data-tour="who-to-follow">
     <div class="p-3 flex items-center">
       <p class="text-lg font-bold">Who to follow</p>
     </div>
@@ -47,9 +50,6 @@ resulting from the use or misuse of this software.
         <span class="pointer-events-none absolute top-full mt-1 z-10 whitespace-nowrap rounded bg-lighter px-2 py-0.5 text-xs text-dark ring-1 ring-[color:var(--gd-trim)] opacity-0 group-hover:opacity-100 transition-opacity">{{ tab.label }}</span>
       </button>
     </div>
-    <!-- Room for a full tab (sectionLimit rows of 73px) whatever this one
-         holds, so switching networks never resizes the panel. -->
-    <div class="min-h-[365px]">
     <div v-for="profile in activeProfiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
       <div class="grid flex-none">
         <img
@@ -60,7 +60,7 @@ resulting from the use or misuse of this software.
         />
         <UserStatusDot :user="profile" />
       </div>
-      <div class="hidden lg:block ml-4 min-w-0">
+      <div class="hidden lg:block ml-4 w-[9rem] flex-none">
         <p @click="pushToProfilePage(profile.id)" class="text-left text-sm font-bold leading-tight cursor-pointer truncate max-w-[9rem]">{{ profile.username }}</p>
         <p class="text-left text-sm leading-tight text-dark truncate max-w-[9rem]" :title="profile.id">{{ shortHandle(profile.id, 8) }}</p>
       </div>
@@ -68,7 +68,7 @@ resulting from the use or misuse of this software.
         v-if="!isFollowing(profile.id)"
         @click="follow(profile.id)"
         :disabled="isPending(profile.id)"
-        class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2 disabled:opacity-50"
+        class="ml-auto w-[6.5rem] flex-none text-sm text-blue font-bold py-1 rounded-full border border-blue m-2 disabled:opacity-50"
       >
         Follow
       </button>
@@ -76,7 +76,7 @@ resulting from the use or misuse of this software.
           v-if="isFollowing(profile.id)"
           @click="unfollow(profile.id)"
           :disabled="isPending(profile.id)"
-          class="ml-auto text-sm font-bold px-4 py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
+          class="ml-auto w-[6.5rem] flex-none text-sm font-bold py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
       >
         <span class="group-hover:hidden">Following</span>
         <span class="hidden group-hover:inline">Unfollow</span>
@@ -85,7 +85,6 @@ resulting from the use or misuse of this software.
     <p v-if="activeProfiles.length === 0" class="p-3 border-t border-lighter text-sm text-dark text-left">
       Nobody to suggest here yet.
     </p>
-    </div>
     <button
         @click="showMore()"
         class="p-3 w-full hover:bg-lighter text-left text-blue border-t border-lighter"
