@@ -43,6 +43,7 @@ import (
 
 	"github.com/Warp-net/warpnet/security"
 
+	"github.com/Warp-net/warpnet/core/bridge"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -600,6 +601,16 @@ func TestStreamGetImageHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,CACHED"}, out)
 		assert.Empty(t, streamer.streamedTo, "an unknown user has no node to ask")
+	})
+
+	t.Run("unknown bridged author is fetched from the gateway", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{response: mustJSON(t, event.GetImageResponse{File: "data:image/png;base64,UkVQT1NU"})}
+		repo := newImageRepoDouble()
+		h := StreamGetImageHandler(streamer, repo, mediaUserDouble{}, &stubImageHashes{})
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "npub1abc@nostr.com", Key: "https://img.example/a.png"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: "data:image/png;base64,UkVQT1NU"}, out)
+		assert.Equal(t, []string{bridge.GatewayNodeID()}, streamer.streamedTo)
 	})
 
 	t.Run("user lookup failure surfaces", func(t *testing.T) {
