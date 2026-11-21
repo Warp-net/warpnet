@@ -8,7 +8,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -16,7 +15,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	owner := "owner-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -24,7 +23,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -49,6 +48,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			stubUserFollowsCounter{getFollowingsFn: func(userId string, limit *uint64, cursor *string) ([]string, string, error) {
 				return []string{"already-followed"}, "", nil
 			}},
+			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -75,6 +75,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 				},
 			},
 			stubUserFollowsCounter{},
+			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -102,6 +103,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 				},
 			},
 			stubUserFollowsCounter{},
+			stubUserStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -117,15 +119,33 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
 			return nil, "", repoErr
-		}}, stubUserFollowsCounter{})
+		}}, stubUserFollowsCounter{}, stubUserStreamer{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
 	})
 
+	t.Run("owner's first page asks the gateway for bridged suggestions", func(t *testing.T) {
+		asked := make(chan string, 1)
+		streamer := stubUserStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+			genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+				asked <- nodeId
+				return json.Marshal(event.UsersResponse{})
+			},
+		}
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, streamer)
+		if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got := <-asked; got != bridge.GatewayNodeID() {
+			t.Fatalf("asked %s, want the gateway", got)
+		}
+	})
+
 	t.Run("empty results", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{})
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -135,59 +155,4 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			t.Fatalf("expected empty users: %v", r.Users)
 		}
 	})
-}
-
-func TestWithBridgedSuggestions(t *testing.T) {
-	const owner = "owner-1"
-	inner := func([]byte, warpnet.WarpStream) (any, error) { return "answered", nil }
-	gatewayUser := domain.User{Id: "npub1abc@nostr.com", Username: "ed", NodeId: bridge.GatewayNodeID(), Network: "nostr"}
-
-	var created []string
-	repo := stubUserFetcher{
-		createFn: func(u domain.User) (domain.User, error) {
-			created = append(created, u.Id)
-			return u, nil
-		},
-	}
-	var asked []string
-	streamer := stubUserStreamer{
-		nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-		genericStreamFn: func(nodeId string, path stream.WarpRoute, _ any) ([]byte, error) {
-			asked = append(asked, nodeId+" "+string(path))
-			return json.Marshal(event.UsersResponse{Users: []domain.User{gatewayUser}})
-		},
-	}
-	h := WithBridgedSuggestions(inner, repo, streamer)
-
-	out, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
-	require.NoError(t, err)
-	require.Equal(t, "answered", out)
-	require.Equal(t, []string{bridge.GatewayNodeID() + " " + string(event.PUBLIC_GET_WHOTOFOLLOW)}, asked)
-	require.Equal(t, []string{gatewayUser.Id}, created, "the gateway's suggestions are stored before answering")
-
-	_, err = h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
-	require.NoError(t, err)
-	require.Len(t, asked, 1, "the gateway is asked at most once per interval")
-
-	other := WithBridgedSuggestions(inner, repo, streamer)
-	_, err = other(marshal(t, event.GetAllUsersEvent{UserId: "someone-else"}), nil)
-	require.NoError(t, err)
-	require.Len(t, asked, 1, "only the owner's own suggestions are refreshed")
-}
-
-func TestWithBridgedSuggestionsRetriesAnUnreachedGateway(t *testing.T) {
-	const owner = "owner-1"
-	inner := func([]byte, warpnet.WarpStream) (any, error) { return nil, nil }
-	calls := 0
-	streamer := stubUserStreamer{
-		nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-		genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
-			calls++
-			return nil, errors.New("node is offline")
-		},
-	}
-	h := WithBridgedSuggestions(inner, stubUserFetcher{}, streamer)
-	_, _ = h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
-	_, _ = h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
-	require.Equal(t, 1, calls, "a failed refresh waits for the retry interval")
 }
