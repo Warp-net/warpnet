@@ -70,6 +70,23 @@ func TestStreamGetUserHandlerBranches(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("unknown bridged user without a node hint is asked of the gateway", func(t *testing.T) {
+		repo := stubUserFetcher{getFn: func(string) (domain.User, error) {
+			return domain.User{}, database.ErrUserNotFound
+		}}
+		var asked string
+		streamer := stubUserStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			asked = nodeId
+			return json.Marshal(domain.User{Id: "npub1abc@nostr.com", Username: "ed", NodeId: bridge.GatewayNodeID()})
+		}}
+
+		out, err := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, repo, auth, streamer)(
+			marshal(t, event.GetUserEvent{UserId: "npub1abc@nostr.com"}), nil)
+		require.NoError(t, err)
+		require.Equal(t, bridge.GatewayNodeID(), asked)
+		require.Equal(t, "ed", out.(domain.User).Username)
+	})
+
 	t.Run("user hosted on this node is returned as-is", func(t *testing.T) {
 		repo := stubUserFetcher{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: "own-node"}, nil

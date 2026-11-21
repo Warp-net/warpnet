@@ -128,7 +128,13 @@ func StreamGetUserHandler(
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
 			log.Warnf("get other user from db: %v - %s", err, ev.UserId)
-			fetchedUser, fetchErr := updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
+			nodeId := ev.NodeId
+			if nodeId == "" && bridge.IsBridgedUserID(ev.UserId) {
+				// An author seen only inside another post, such as a repost,
+				// comes with no node hint; a bridged one lives on the gateway.
+				nodeId = bridge.GatewayNodeID()
+			}
+			fetchedUser, fetchErr := updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: nodeId}, streamer)
 			if fetchErr != nil || fetchedUser.Username == "" {
 				return nil, fmt.Errorf("get user: other user %w", err)
 			}
