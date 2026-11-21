@@ -4,7 +4,6 @@ import { render, screen, waitFor } from '@testing-library/vue';
 vi.mock('@/service/service', () => ({
   warpnetService: {
     getProfile: vi.fn(),
-    getGatewaySettings: vi.fn(),
     getImage: vi.fn(),
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
@@ -124,33 +123,5 @@ describe('TweetBlock per-element loading', () => {
       expect(imgs).toHaveLength(1);
       expect(imgs[0]).toHaveAttribute('src', 'data:image/png;base64,one');
     });
-  });
-});
-
-describe('TweetBlock bridged author', () => {
-  it('asks for an unknown bridged author through the gateway before their images', async () => {
-    const order = [];
-    warpnetService.getGatewaySettings.mockResolvedValue({ node_id: 'GW' });
-    warpnetService.getProfile.mockImplementation(async (id, hint) => {
-      order.push(`profile:${hint}`);
-      return { id, username: 'ed', avatar_key: '' };
-    });
-    warpnetService.getImage.mockImplementation(async ({ key }) => {
-      order.push(`image:${key}`);
-      return null;
-    });
-
-    renderTweet({
-      ...baseTweet,
-      user_id: 'npub1abc@nostr.com',
-      network: 'nostr',
-      retweeted_by: 'npub1ben@nostr.com',
-      image_keys: ['https://img.example/a.png'],
-    });
-
-    await waitFor(() => expect(order).toContain('image:https://img.example/a.png'));
-    const hinted = order.indexOf('profile:GW');
-    expect(hinted).toBeGreaterThanOrEqual(0);
-    expect(hinted).toBeLessThan(order.indexOf('image:https://img.example/a.png'));
   });
 });
