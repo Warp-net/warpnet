@@ -2678,16 +2678,6 @@ export const warpnetService = {
         });
     },
 
-    // denyNostr records the sign-up opt-out of showing the owner's content on
-    // Nostr, which is on by default. The gateway reads it from the profile
-    // metadata.
-    async denyNostr() {
-        return await this.sendToNode({
-            path: PRIVATE_POST_USER,
-            body: {metadata: {nostr: 'deny'}},
-        });
-    },
-
     cacheDataSaver(enabled) {
         try {
             localStorage.setItem(DATA_SAVER_STORAGE_KEY, enabled ? 'true' : 'false');
