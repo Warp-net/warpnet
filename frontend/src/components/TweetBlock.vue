@@ -60,7 +60,7 @@ resulting from the use or misuse of this software.
           {{ authorName || 'Anonymous' }}
         </button>
         <p class="hidden md:block text-sm text-dark ml-2 truncate min-w-0">
-          @{{ tweet.user_id }}
+          @{{ shortHandle(tweet.user_id) }}
         </p>
         <p class="text-sm text-dark ml-2 flex-none">·</p>
         <p class="text-sm text-dark ml-2 flex-none whitespace-nowrap">{{ $filters.timeago(tweet.created_at) }}</p>
@@ -220,7 +220,7 @@ resulting from the use or misuse of this software.
         <template v-else>
           <p class="font-bold break-words">
             {{ quotedSourceUsername || 'Quoted tweet' }}
-            <span class="text-dark font-normal ml-1">@{{ tweet.quoted_user_id }}</span>
+            <span class="text-dark font-normal ml-1">@{{ shortHandle(tweet.quoted_user_id) }}</span>
           </p>
           <p v-if="quotedSourceText" class="mt-1 line-clamp-4 break-words">{{ quotedSourceText }}</p>
           <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
@@ -469,7 +469,7 @@ import {watchOrder} from "@/lib/order-worker";
 import {extractYoutubeId} from "@/lib/youtube";
 import {createVideoURL, revokeVideoURL} from "@/lib/video";
 import {DEFAULT_REACTION} from "@/lib/emoji";
-import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
+import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork, shortHandle} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 
@@ -671,6 +671,7 @@ export default {
     },
   },
   methods: {
+    shortHandle,
     async loadAuthor() {
       try {
         this.profile = await warpnetService.getProfile(this.tweet.user_id);
