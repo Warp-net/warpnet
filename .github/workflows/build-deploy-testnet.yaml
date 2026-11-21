@@ -101,7 +101,7 @@ jobs:
           cache-from: type=gha,scope=echo
           cache-to: type=gha,mode=max,scope=echo
 
-  build-vadim:
+  build-demo:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -128,13 +128,13 @@ jobs:
           context: .
           file: Dockerfile.remote
           push: true
-          tags: ghcr.io/warp-net/warpnet-vadim:latest
+          tags: ghcr.io/warp-net/warpnet-demo:latest
           cache-from: type=gha,scope=remote
           cache-to: type=gha,mode=max,scope=remote
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [ build-relay, build-moderator, build-echo, build-vadim ]
+    needs: [ build-relay, build-moderator, build-echo, build-demo ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
