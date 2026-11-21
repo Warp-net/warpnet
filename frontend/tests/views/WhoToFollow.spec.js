@@ -71,14 +71,14 @@ describe('WhoToFollow.vue', () => {
   it('gives a network the client does not know its own section', async () => {
     warpnetService.getWhoToFollow.mockResolvedValueOnce([
       { id: WARPNET_ID, username: 'alice' },
-      { id: 'npub1abc@nostr.com', username: 'carol', network: 'nostr' },
+      { id: 'carol@bsky.social', username: 'carol', network: 'bluesky' },
     ]);
 
     renderView();
 
     expect(await screen.findByText('carol')).toBeInTheDocument();
-    expect(screen.getByText('Nostr')).toBeInTheDocument();
-    expect(screen.getByLabelText('nostr')).toBeInTheDocument();
+    expect(screen.getByText('Bluesky')).toBeInTheDocument();
+    expect(screen.getByLabelText('bluesky')).toBeInTheDocument();
   });
 
   it('hides a section when there are no users from that network', async () => {

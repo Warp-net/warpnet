@@ -81,7 +81,7 @@ export const onboardingSteps = [
   {
     anchor: "nav-settings",
     title: "Settings",
-    text: "Filters, mutes and blocks, paired phones, the Fediverse gateway, network and your node's rating.",
+    text: "Filters, mutes and blocks, paired phones, the bridge gateway, network and your node's rating.",
   },
   {
     anchor: "tweet-button",

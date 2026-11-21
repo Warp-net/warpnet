@@ -39,7 +39,8 @@ resulting from the use or misuse of this software.
           <div class="lg:block ml-4">
             <h1 class="text-xl font-bold">{{ profile.username || "Anonymous" }}</h1>
             <p v-if="!noUser" class="text-left text-sm leading-tight text-dark">
-              {{ profile.tweets_count || tweets.length}} Tweets
+              <i v-if="(tweetsLoading || profileRefreshing) && !profile.tweets_count" class="fas fa-circle-notch fa-spin" role="status" aria-label="Loading"></i>
+              <template v-else>{{ profile.tweets_count || tweets.length}}</template> Tweets
             </p>
           </div>
         </div>
@@ -55,7 +56,7 @@ resulting from the use or misuse of this software.
             from <b>{{ profile.network }}</b>. Anything you do here (post, reply,
             like, follow) leaves the peer-to-peer network and is stored on
             <b>{{ profile.network }}</b>'s servers — you no longer own or control
-            that data. It also passes through the Warpnet↔Fediverse gateway, which
+            that data. It also passes through the Warpnet bridge gateway, which
             decrypts and re-encrypts it — so it is briefly in plain text there.
             Moderation there is performed by human administrators, not
             by Warpnet's automated (LLM) moderation.
@@ -181,13 +182,14 @@ resulting from the use or misuse of this software.
           <div v-if="!noUser && !loading" class="px-3">
             <p class="font-bold text-xl">{{ profile.username || '...' }}</p>
             <p class="text-dark">
-              @{{ profile.id || '' }}
+              @{{ shortHandle(profile.id || '') }}
               <span
                 v-if="isFollower() && !isSelf"
                 class="text-sm font-medium bg-gray-100 py-1 px-1 mx-2 rounded text-gray-500 align-middle"
               >Follows you</span>
             </p>
-            <p :key="bio" class="my-2" v-linkify>{{ bio }}</p>
+            <p v-if="profileRefreshing && !bio" class="my-2"><i class="fas fa-circle-notch fa-spin text-dark" role="status" aria-label="Loading"></i></p>
+            <p v-else :key="bio" class="my-2" v-linkify>{{ bio }}</p>
             <div class="flex flex-col md:flex-row mt-1 mb-2">
               <div v-if="profile.website" class="flex flex-row mr-4">
                 <i
@@ -213,21 +215,27 @@ resulting from the use or misuse of this software.
                 @click="goToFollowing()"
                 class="mr-4 flex flex-row hover:underline"
               >
-                <span class="font-bold">{{ profile.followings_count || followings.length }}</span>
+                <span class="font-bold">
+                  <i v-if="(followingsLoading || profileRefreshing) && !profile.followings_count" class="fas fa-circle-notch fa-spin" role="status" aria-label="Loading"></i>
+                  <template v-else>{{ profile.followings_count || followings.length }}</template>
+                </span>
                 <span class="text-dark whitespace-pre"> Following</span>
               </button>
               <button
                 @click="goToFollowers()"
                 class="flex flex-row hover:underline"
               >
-                <span class="font-bold">{{ profile.followers_count || followers.length }}</span>
+                <span class="font-bold">
+                  <i v-if="(followersLoading || profileRefreshing) && !profile.followers_count" class="fas fa-circle-notch fa-spin" role="status" aria-label="Loading"></i>
+                  <template v-else>{{ profile.followers_count || followers.length }}</template>
+                </span>
                 <span class="text-dark whitespace-pre"> Followers</span>
               </button>
             </div>
           </div>
           <div v-if="noUser" class="px-5">
             <p class="text-black text-lg">
-              @{{ $route.params.id }}
+              @{{ shortHandle($route.params.id) }}
             </p>
           </div>
           <div
@@ -282,9 +290,9 @@ resulting from the use or misuse of this software.
 
         <!-- tweets -->
         <template v-if="activeTab === 'tweets'">
-          <Loader :loading="loading" />
+          <Loader :loading="loading || (!noUser && tweetsLoading && tweets.length === 0)" />
           <div
-            v-if="!noUser && !loading && tweets.length === 0"
+            v-if="!noUser && !loading && !tweetsLoading && tweets.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10"
           >
             <p class="font-bold text-lg">
@@ -396,7 +404,7 @@ import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {decodeHtmlEntities, isBridgedUser} from "@/lib/network";
+import {decodeHtmlEntities, isBridgedUser, shortHandle} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
@@ -421,6 +429,12 @@ export default {
       followingLabel: "Following",
       followPending: false,
       loading: true,
+      // The lists and the profile refresh fill in after the header; until
+      // they do, a zero or an empty feed would be a guess, so they spin.
+      tweetsLoading: true,
+      followersLoading: true,
+      followingsLoading: true,
+      profileRefreshing: false,
       noUser: false,
       ownerProfile: {},
       profile: {},
@@ -480,6 +494,7 @@ export default {
     },
   },
   methods: {
+    shortHandle,
     isMySelf(profileId) {
       return profileId === this.ownerProfile.user_id;
     },
@@ -897,15 +912,35 @@ export default {
       }).catch((err) => console.warn(`failed to resolve follow state [${profileId}]:`, err));
     }
 
-    warpnetService.getTweets({userId: profileId, cursorReset: true})
-        .then((tweets) => { this.tweets = tweets; })
-        .catch((err) => console.error('Failed to load tweets:', err));
-    warpnetService.getFollowers({userId: profileId, cursorReset: true})
-        .then((followers) => { this.followers = followers; })
-        .catch((err) => console.error('Failed to load followers:', err));
-    warpnetService.getFollowings({userId: profileId, cursorReset: true})
-        .then((followings) => { this.followings = followings; })
-        .catch((err) => console.error('Failed to load followings:', err));
+    const lists = [
+      warpnetService.getTweets({userId: profileId, cursorReset: true})
+          .then((tweets) => { this.tweets = tweets; })
+          .catch((err) => console.error('Failed to load tweets:', err))
+          .finally(() => { this.tweetsLoading = false; }),
+      warpnetService.getFollowers({userId: profileId, cursorReset: true})
+          .then((followers) => { this.followers = followers; })
+          .catch((err) => console.error('Failed to load followers:', err))
+          .finally(() => { this.followersLoading = false; }),
+      warpnetService.getFollowings({userId: profileId, cursorReset: true})
+          .then((followings) => { this.followings = followings; })
+          .catch((err) => console.error('Failed to load followings:', err))
+          .finally(() => { this.followingsLoading = false; }),
+    ];
+    // Another user's profile comes from this node's copy, which the node only
+    // refreshes from their home node in the background; read it once more
+    // after the lists, by when the refresh has landed, for bio and counts.
+    if (!this.isSelf) {
+      this.profileRefreshing = true;
+      Promise.allSettled(lists)
+          .then(() => warpnetService.getProfile(profileId))
+          .then((fresh) => {
+            if (fresh && fresh.id === this.profile.id) {
+              this.profile = {...this.profile, ...fresh, avatar: this.profile.avatar, background_image: this.profile.background_image};
+            }
+          })
+          .catch((err) => console.warn(`failed to refresh profile [${profileId}]:`, err))
+          .finally(() => { this.profileRefreshing = false; });
+    }
     warpnetService.getUsers({profileId: profileId, cursorReset: true})
         .then(async (users) => {
           this.users = users;

@@ -34,6 +34,7 @@ const WARPNET_NETWORKS = ['warpnet', 'testnet', 'mainnet'];
 // is per-account.
 export const NETWORK_MASTODON = 'mastodon';
 export const NETWORK_THREADS = 'threads';
+export const NETWORK_NOSTR = 'nostr';
 
 // networkOf names the foreign network behind a tag, '' for a native Warpnet
 // one. Rows cached before the tag existed carry none, so it falls back to the
@@ -175,4 +176,20 @@ const PRODUCTION_NETWORKS = ['warpnet', 'mainnet'];
 // unknown value warns rather than stays silent.
 export function isExperimentalNetwork(network) {
     return !PRODUCTION_NETWORKS.includes((network || '').trim().toLowerCase());
+}
+
+// A Nostr account's id is its 63-character npub on a fixed domain; lists show
+// "npub1abcdef…wxyz" instead. fallbackLen, when given, clips any other id the
+// same way short rows always did.
+const NPUB_RE = /^(npub1[02-9ac-hj-np-z]{58})(@[^@]+)?$/i;
+
+export function shortHandle(id, fallbackLen) {
+    const m = NPUB_RE.exec(id || '');
+    if (m) {
+        return `${m[1].slice(0, 11)}…${m[1].slice(-4)}`;
+    }
+    if (fallbackLen && id && id.length > fallbackLen) {
+        return `${id.slice(0, fallbackLen)}...`;
+    }
+    return id || '';
 }

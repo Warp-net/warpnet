@@ -7,6 +7,7 @@ import {
   fediverseHandle,
   isOwnTweetEcho,
   decodeHtmlEntities,
+  shortHandle,
 } from '@/lib/network';
 
 const ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
@@ -170,5 +171,21 @@ describe('isExperimentalNetwork', () => {
 
   it('ignores surrounding whitespace and case', () => {
     expect(isExperimentalNetwork('  Warpnet  ')).toBe(false);
+  });
+});
+
+describe('shortHandle', () => {
+  const NPUB = 'npub1ftd5lukuw2alrak6r87ppyqg5fgp8jpheacjq95h97kszkce2yls5dv5jq';
+
+  it('shortens a Nostr handle to its head and tail', () => {
+    expect(shortHandle(`${NPUB}@nostr.com`)).toBe('npub1ftd5lu…v5jq');
+    expect(shortHandle(NPUB)).toBe('npub1ftd5lu…v5jq');
+  });
+
+  it('leaves other ids alone unless asked to clip them', () => {
+    expect(shortHandle(ULID)).toBe(ULID);
+    expect(shortHandle('bob@mastodon.social')).toBe('bob@mastodon.social');
+    expect(shortHandle(ULID, 8)).toBe('01ARZ3ND...');
+    expect(shortHandle(undefined)).toBe('');
   });
 });
