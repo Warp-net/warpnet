@@ -155,6 +155,8 @@ struct WarpnetRouter: Sendable {
                                                                           parentId: address.parentId,
                                                                           text: json.status))
       await repository.forgetTweet(address.tweetId)
+      // The node cancels plain retweets of an edited tweet.
+      await repository.setRetweeted(false, tweetId: address.tweetId)
       guard let status = await repository.status(edited) else { throw WarpnetRoutingError.unknownStatus(id) }
       return try response(status)
 
