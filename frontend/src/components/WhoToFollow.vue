@@ -47,6 +47,9 @@ resulting from the use or misuse of this software.
         <span class="pointer-events-none absolute top-full mt-1 z-10 whitespace-nowrap rounded bg-lighter px-2 py-0.5 text-xs text-dark ring-1 ring-[color:var(--gd-trim)] opacity-0 group-hover:opacity-100 transition-opacity">{{ tab.label }}</span>
       </button>
     </div>
+    <!-- Room for a full tab (sectionLimit rows of 73px) whatever this one
+         holds, so switching networks never resizes the panel. -->
+    <div class="min-h-[365px]">
     <div v-for="profile in activeProfiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
       <div class="grid flex-none">
         <img
@@ -82,6 +85,7 @@ resulting from the use or misuse of this software.
     <p v-if="activeProfiles.length === 0" class="p-3 border-t border-lighter text-sm text-dark text-left">
       Nobody to suggest here yet.
     </p>
+    </div>
     <button
         @click="showMore()"
         class="p-3 w-full hover:bg-lighter text-left text-blue border-t border-lighter"
