@@ -71,6 +71,7 @@ const KNOWN_SECTIONS = [
     {key: 'warpnet', label: 'Warpnet', network: ''},
     {key: NETWORK_MASTODON, label: 'Mastodon', network: NETWORK_MASTODON},
     {key: NETWORK_THREADS, label: 'Threads', network: NETWORK_THREADS},
+    {key: NETWORK_NOSTR, label: 'Nostr', network: NETWORK_NOSTR},
 ];
 
 // sectionKey is the section a profile belongs in.

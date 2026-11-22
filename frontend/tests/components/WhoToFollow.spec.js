@@ -120,6 +120,7 @@ describe('WhoToFollow.vue (sidebar)', () => {
     // A tab that appeared only once it had content would hide the fact that the
     // other networks exist at all, so it stays and says it is empty.
     expect(screen.getByRole('tab', { name: 'Threads' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Nostr' })).toBeInTheDocument();
     await openTab('Threads');
     expect(await screen.findByText('Nobody to suggest here yet.')).toBeInTheDocument();
   });
