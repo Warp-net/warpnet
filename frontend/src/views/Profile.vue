@@ -203,11 +203,11 @@ resulting from the use or misuse of this software.
                   {{ profile.website.replace(/^https?:\/\//, '') }}
                 </a>
               </div>
-              <div v-if="joinedDate(profile.created_at)" class="flex flex-row mr-4">
+              <div v-if="joinedDate(profile)" class="flex flex-row mr-4">
                 <i
                   class="far fa-calendar-alt text-dark align-text-bottom pt-1 mr-2"
                 ></i>
-                <p class="text-dark">Joined {{ joinedDate(profile.created_at) }}</p>
+                <p class="text-dark">Joined {{ joinedDate(profile) }}</p>
               </div>
             </div>
             <div v-if="!noUser && !loading" class="flex flex-row mt-1">
@@ -404,7 +404,7 @@ import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {decodeHtmlEntities, isBridgedUser, shortHandle} from "@/lib/network";
+import {bridgedNetwork, decodeHtmlEntities, isBridgedUser, NETWORK_NOSTR, shortHandle} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
@@ -498,11 +498,14 @@ export default {
     isMySelf(profileId) {
       return profileId === this.ownerProfile.user_id;
     },
-    joinedDate(createdAt) {
+    joinedDate(profile) {
+      // Nostr has no sign-up date: the gateway's timestamp is the profile's
+      // last edit, so it is not shown as one.
+      if (bridgedNetwork(profile) === NETWORK_NOSTR) return "";
       // Guard against a missing/invalid timestamp — moment(undefined) would
       // otherwise return "now" and every profile would read "Joined <today>".
-      if (!createdAt) return "";
-      const m = moment(createdAt);
+      if (!profile?.created_at) return "";
+      const m = moment(profile.created_at);
       return m.isValid() ? m.format("MMMM YYYY") : "";
     },
     tweetNow() {
