@@ -190,6 +190,26 @@ data class GetTweetStatsEvent(
     @Json(name = "user_id") val userId: String,
 )
 
+// Wire shape mirrors event.GetTrustEvent.
+@JsonClass(generateAdapter = true)
+data class GetTrustEvent(
+    @Json(name = "user_ids") val userIds: List<String>,
+)
+
+// Wire shape mirrors domain.Trust: where the paired node places an author
+// in its owner's trust circle.
+@JsonClass(generateAdapter = true)
+data class Trust(
+    @Json(name = "is_trusted") val isTrusted: Boolean = false,
+    @Json(name = "score") val score: Double = 0.0,
+    @Json(name = "vouchers") val vouchers: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetTrustResponse(
+    @Json(name = "users") val users: Map<String, Trust> = emptyMap(),
+)
+
 // For a reply, parentId/rootId address the parent partition it is stored
 // under so the node deletes it from the thread (not the timeline keyspace).
 @JsonClass(generateAdapter = true)

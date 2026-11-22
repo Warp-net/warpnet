@@ -60,6 +60,7 @@ object ProtocolIds {
 
     // private reads (require pairing)
     const val PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
+    const val PRIVATE_GET_TRUST = "/private/get/trust/0.0.0"
     const val PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
     const val PRIVATE_GET_PUSHES = "/private/get/pushes/0.0.0"
     const val PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
