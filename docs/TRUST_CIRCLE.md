@@ -105,7 +105,8 @@ type Circle struct {
 func (r *Circle) Trust(userId string) domain.Trust
 func (r *Circle) Refresh() error    // rebuilds the second hop
 func (r *Circle) RefreshNew() error // lists mutuals not listed yet
-func (r *Circle) Run()           // refresh loop until the node's context ends
+func (r *Circle) Start()            // starts the refresh loop
+func (r *Circle) Close()            // stops the loop and waits for it; the node calls it in Stop
 ```
 
 - **Direct part is read live** from `FollowRepo` (`IsFollowing`, `IsFollower`)
@@ -148,7 +149,7 @@ type GetTrustResponse struct {
     Users map[string]domain.Trust `json:"users"`
 }
 
-// domain
+// domain/warpnet.go
 type Trust struct {
     IsTrusted bool    `json:"is_trusted"`
     Score     float64 `json:"score"`

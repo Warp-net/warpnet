@@ -31,7 +31,6 @@
 package trust
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -48,6 +47,8 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
+
+const ErrClosed = warpnet.WarpError("trust: circle closed")
 
 const (
 	// threshold is the score a stranger needs: one vouching mutual with at
@@ -89,7 +90,6 @@ type listing struct {
 }
 
 type Circle struct {
-	ctx      context.Context
 	ownerId  string
 	follows  FollowsReader
 	users    UsersReader
@@ -98,23 +98,26 @@ type Circle struct {
 
 	mu       sync.RWMutex
 	listings map[string]listing // mutual -> its listing; replaced whole on refresh
+
+	stop      chan struct{}
+	closeOnce sync.Once
+	loop      sync.WaitGroup
 }
 
 func NewCircle(
-	ctx context.Context,
 	ownerId string,
 	follows FollowsReader,
 	users UsersReader,
 	streamer NodeStreamer,
 ) *Circle {
 	return &Circle{
-		ctx:      ctx,
 		ownerId:  ownerId,
 		follows:  follows,
 		users:    users,
 		streamer: streamer,
 		pause:    requestPause,
 		listings: map[string]listing{},
+		stop:     make(chan struct{}),
 	}
 }
 
@@ -148,16 +151,27 @@ func (r *Circle) Trust(userId string) domain.Trust {
 	return domain.Trust{IsTrusted: score >= threshold, Score: score, Vouchers: vouchers}
 }
 
-// Run refreshes the second hop until the context ends: in full every few
-// hours, and in between only for mutuals it has not listed yet.
-func (r *Circle) Run() {
+// Start refreshes the second hop until Close: in full every few hours, and
+// in between only for mutuals it has not listed yet.
+func (r *Circle) Start() {
+	r.loop.Go(r.run)
+}
+
+// Close stops the refresh loop and waits for it. A refresh under way stops
+// before its next mutual.
+func (r *Circle) Close() {
+	r.closeOnce.Do(func() { close(r.stop) })
+	r.loop.Wait()
+}
+
+func (r *Circle) run() {
 	full := time.NewTimer(firstRefreshDelay)
 	defer full.Stop()
 	newMutuals := time.NewTicker(newMutualsInterval)
 	defer newMutuals.Stop()
 	for {
 		select {
-		case <-r.ctx.Done():
+		case <-r.stop:
 			return
 		case <-newMutuals.C:
 			if err := r.RefreshNew(); err != nil {
@@ -229,8 +243,8 @@ func (r *Circle) fill(listings map[string]listing, mutuals []string, previous ma
 	for i, mutualId := range mutuals {
 		if i > 0 {
 			select {
-			case <-r.ctx.Done():
-				return r.ctx.Err()
+			case <-r.stop:
+				return ErrClosed
 			case <-time.After(r.pause):
 			}
 		}

@@ -28,10 +28,10 @@
 package trust
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -138,7 +138,7 @@ func newStand(t *testing.T) *stand {
 		users:    fakeUsers{},
 		streamer: fakeStreamer{},
 	}
-	s.circle = NewCircle(context.Background(), owner, s.follows, s.users, s.streamer)
+	s.circle = NewCircle(owner, s.follows, s.users, s.streamer)
 	s.circle.pause = 0
 	return s
 }
@@ -339,4 +339,44 @@ func TestRefreshNewRetriesUnreachableMutual(t *testing.T) {
 	remote.isOffline = false
 	require.NoError(t, s.circle.RefreshNew())
 	require.True(t, s.circle.Trust("alice").IsTrusted)
+}
+
+func TestCloseStopsRefreshBeforeNextMutual(t *testing.T) {
+	s := newStand(t)
+	s.mutual("m1", 0, "alice")
+	s.mutual("m2", 0, "bob")
+	s.circle.pause = time.Hour
+
+	refreshed := make(chan error, 1)
+	go func() { refreshed <- s.circle.Refresh() }()
+	time.Sleep(50 * time.Millisecond) // the first mutual is listed, the pause begins
+	s.circle.Close()
+
+	select {
+	case err := <-refreshed:
+		require.ErrorIs(t, err, ErrClosed)
+	case <-time.After(5 * time.Second):
+		t.Fatal("refresh did not stop on Close")
+	}
+}
+
+func TestCloseStopsTheLoop(t *testing.T) {
+	s := newStand(t)
+	s.circle.Start()
+
+	closed := make(chan struct{})
+	go func() {
+		s.circle.Close()
+		s.circle.Close() // a second Close is a no-op
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not wait the loop out")
+	}
+}
+
+func TestCloseWithoutStart(t *testing.T) {
+	NewCircle(owner, &fakeFollows{}, fakeUsers{}, fakeStreamer{}).Close()
 }

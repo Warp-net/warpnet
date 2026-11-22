@@ -306,8 +306,8 @@ func (m *MemberNode) Start() (err error) {
 
 	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event(), m.events)
 
-	m.trustCircle = trust.NewCircle(m.ctx, m.ownerId, m.followRepo, m.userRepo, m)
-	go m.trustCircle.Run()
+	m.trustCircle = trust.NewCircle(m.ownerId, m.followRepo, m.userRepo, m)
+	m.trustCircle.Start()
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -1209,6 +1209,9 @@ func (m *MemberNode) Stop() {
 		return
 	}
 
+	if m.trustCircle != nil {
+		m.trustCircle.Close()
+	}
 	if m.walletClient != nil {
 		m.walletClient.Close()
 	}
