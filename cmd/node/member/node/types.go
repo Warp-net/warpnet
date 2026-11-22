@@ -155,6 +155,12 @@ type PeerRater interface {
 	Close() error
 }
 
+// TrustCircle places authors in the owner's trust circle, refreshed in Run.
+type TrustCircle interface {
+	Trust(userId string) domain.Trust
+	Run()
+}
+
 // RatingStorer is the replicated record store the rating engine writes to.
 type RatingStorer interface {
 	Put(recs ...domain.RatingRecord) error

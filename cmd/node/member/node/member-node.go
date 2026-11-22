@@ -46,6 +46,7 @@ import (
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/trust"
 	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -80,6 +81,7 @@ type MemberNode struct {
 	ratingDb         RatingStorer
 	rating           PeerRater
 	ratings          PeersRatings
+	trustCircle      TrustCircle
 	events           warpnet.PeerEmitter
 	privKey          ed25519.PrivateKey
 	walletClient     WalletProvider
@@ -303,6 +305,9 @@ func (m *MemberNode) Start() (err error) {
 	)
 
 	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event(), m.events)
+
+	m.trustCircle = trust.NewCircle(m.ctx, m.ownerId, m.followRepo, m.userRepo, m)
+	go m.trustCircle.Run()
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -732,6 +737,10 @@ func (m *MemberNode) followHandlers(
 		{
 			event.PUBLIC_GET_FOLLOWINGS,
 			handler.StreamGetFollowingsHandler(authRepo, userRepo, followRepo, m),
+		},
+		{
+			event.PRIVATE_GET_TRUST,
+			handler.StreamGetTrustHandler(m.trustCircle),
 		},
 	}
 }
