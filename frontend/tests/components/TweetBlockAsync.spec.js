@@ -156,23 +156,6 @@ describe('TweetBlock per-element loading', () => {
     expect(await screen.findByAltText('Tweet image')).toHaveAttribute('src', 'data:image/png;base64,one');
   });
 
-  it('awards a trusted author the medal', async () => {
-    renderTweet(baseTweet);
-    expect(await screen.findByRole('img', { name: 'In your circle' })).toBeInTheDocument();
-  });
-
-  it('awards no medal to a stranger or when the node did not answer', async () => {
-    for (const answer of [false, null]) {
-      warpnetService.isTrusted.mockResolvedValue(answer);
-      const { unmount } = renderTweet(baseTweet);
-      await waitFor(() => expect(warpnetService.isTrusted).toHaveBeenCalled());
-      await Promise.resolve();
-      expect(screen.queryByRole('img', { name: 'In your circle' })).toBeNull();
-      unmount();
-      warpnetService.isTrusted.mockClear();
-    }
-  });
-
   it('shows media at once when the node did not answer', async () => {
     warpnetService.isTrusted.mockResolvedValue(null);
     warpnetService.getImage.mockResolvedValue('data:image/png;base64,one');
@@ -182,11 +165,17 @@ describe('TweetBlock per-element loading', () => {
     expect(await screen.findByAltText('Tweet image')).toHaveAttribute('src', 'data:image/png;base64,one');
   });
 
-  it('awards no medal on the owner\'s own tweet', async () => {
+  it('does not ask about the owner\'s own tweet', async () => {
     warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'author1' });
     renderTweet(baseTweet);
     await screen.findByText('hello world');
     expect(warpnetService.isTrusted).not.toHaveBeenCalled();
+  });
+
+  it('shows no medal on a tweet, even from the circle', async () => {
+    renderTweet(baseTweet);
+    await waitFor(() => expect(warpnetService.isTrusted).toHaveBeenCalled());
+    await Promise.resolve();
     expect(screen.queryByRole('img', { name: 'In your circle' })).toBeNull();
   });
 });

@@ -198,6 +198,7 @@ so a failure never hides anything.
 | `views/Notifications.vue` | Follows, reactions, retweets, replies, mentions and messages from unfamiliar people go to an "Unfamiliar" tab with its unread count. Moderation and sales notifications always stay in the main list. |
 | `components/SideNav.vue` | Unread items from unfamiliar people do not light the notification or message badge. Only the first page is checked, so older unread ones still count. |
 | `views/Conversations.vue`, `views/Messages.vue` (`lib/chat-requests.mixin.js`) | Chats with unfamiliar people sit under "Message requests". Starting a chat or sending a message in it accepts the other user. |
+| `views/Profile.vue` | A member of the circle gets a medal right of the `@handle` on their profile. Tweets carry no medal. |
 | `views/Tweet.vue` | Under the owner's own thread, replies from unfamiliar people fold into "Show N replies from unfamiliar people". |
 | `views/Search.vue`, `views/WhoToFollow.vue`, `components/WhoToFollow.vue` | `warpnetService.circleFirst` moves people in the circle ahead within each page, keeping the node's order within each part. |
 

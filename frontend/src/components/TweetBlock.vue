@@ -59,13 +59,6 @@ resulting from the use or misuse of this software.
         <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn truncate min-w-0 text-left">
           {{ authorName || 'Anonymous' }}
         </button>
-        <i
-            v-if="isTrustedAuthor"
-            class="fas fa-medal ml-1 flex-none text-[#7a5f22] dark:text-darktheme-gold"
-            title="In your circle"
-            aria-label="In your circle"
-            role="img"
-        ></i>
         <p class="hidden md:block text-sm text-dark ml-2 truncate min-w-0">
           @{{ shortHandle(tweet.user_id) }}
         </p>
@@ -572,7 +565,6 @@ export default {
       viewsCount: new Map(),
       tweetImages: [],
       isStrangerMedia: false,
-      isTrustedAuthor: false,
       videoSrc: '',
       videoLoading: false,
       videoError: '',
@@ -802,10 +794,9 @@ export default {
     },
     // A stranger's media is not even fetched until the owner asks, so it
     // never lands on this node uninvited. An unanswered trust question
-    // blurs nothing and awards no medal.
+    // blurs nothing.
     async loadMedia() {
       const isTrusted = this.isOwner ? null : await warpnetService.isTrusted(this.tweet.user_id);
-      this.isTrustedAuthor = isTrusted === true;
       const hasMedia = (this.tweet.image_keys || []).length > 0 || this.hasVideo;
       if (hasMedia && isTrusted === false && !warpnetService.isStrangerMediaShown()) {
         this.isStrangerMedia = true;

@@ -183,6 +183,13 @@ resulting from the use or misuse of this software.
             <p class="font-bold text-xl">{{ profile.username || '...' }}</p>
             <p class="text-dark">
               @{{ shortHandle(profile.id || '') }}
+              <i
+                v-if="isInCircle"
+                class="fas fa-medal ml-1 text-[#7a5f22] dark:text-darktheme-gold"
+                title="In your circle"
+                aria-label="In your circle"
+                role="img"
+              ></i>
               <span
                 v-if="isFollower() && !isSelf"
                 class="text-sm font-medium bg-gray-100 py-1 px-1 mx-2 rounded text-gray-500 align-middle"
@@ -426,6 +433,7 @@ export default {
       showSetUpProfileModal: false,
       showEditProfileModal: false,
       isSelf: false,
+      isInCircle: false,
       followingLabel: "Following",
       followPending: false,
       loading: true,
@@ -885,6 +893,11 @@ export default {
     }
 
     this.isSelf = this.isMySelf(profileId);
+    if (!this.isSelf) {
+      warpnetService.isTrusted(profileId)
+        .then((isTrusted) => { this.isInCircle = isTrusted === true; })
+        .catch(() => {});
+    }
 
     // Everything below is an independent per-element fetch that fills in
     // whenever it arrives — one hanging or failing call must not delay the
