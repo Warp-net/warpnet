@@ -101,6 +101,15 @@ resulting from the use or misuse of this software.
               Mentions
             </button>
             <button
+              v-if="unfamiliar.length > 0 || mode === 'Unfamiliar'"
+              @click="submit('Unfamiliar')"
+              class="w-full text-dark font-bold border-b-2 p-1 md:px-3 md:py-4 hover:bg-lightblue sm:truncate"
+              :class="`${this.mode === 'Unfamiliar' ? 'border-blue' : ''}`"
+              title="From people outside your circle"
+            >
+              Unfamiliar<span v-if="unfamiliarUnread > 0" class="ml-1 text-blue">{{ unfamiliarUnread }}</span>
+            </button>
+            <button
               v-if="locked"
               @click="submit('Requests')"
               class="w-full text-dark font-bold border-b-2 p-1 md:px-3 md:py-4 hover:bg-lightblue sm:truncate"
@@ -113,14 +122,14 @@ resulting from the use or misuse of this software.
 
         <!-- notifications -->
         <Loader :loading="loading" />
-        <div v-if="mode === 'All' || mode === 'Mentions'">
+        <div v-if="mode === 'All' || mode === 'Mentions' || mode === 'Unfamiliar'">
           <div
             v-if="!loading && groups.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10"
           >
             <div class="w-1/2 flex flex-col items-center justify-center">
-              <p class="font-bold text-lg">{{ mode === 'Mentions' ? 'No mentions yet' : 'No notifications yet' }}</p>
-              <p class="text-sm text-dark">Wait until some get shown here.</p>
+              <p class="font-bold text-lg">{{ emptyTitle }}</p>
+              <p class="text-sm text-dark">{{ mode === 'Unfamiliar' ? 'Notifications from people outside your circle land here.' : 'Wait until some get shown here.' }}</p>
             </div>
           </div>
 
@@ -260,6 +269,10 @@ const TYPE_FILTERS = [
   ['order_limit', 'Order limits'],
 ];
 
+// Notifications someone outside the circle can cause go to the Unfamiliar
+// tab; system ones (moderation, sales) always stay in the main list.
+const SOCIAL_TYPES = new Set(['follow', 'reaction', 'retweet', 'reply', 'mention', 'message']);
+
 // The node writes "<username> <action>" with the name as it knew it then.
 const ACTIONS = [
   / started following you$/,
@@ -301,18 +314,34 @@ export default {
       pendingAvatars: new Set(),
       tweets: {},
       pendingTweets: new Set(),
+      unfamiliarActors: {},
     };
   },
   computed: {
+    familiar() {
+      return this.notifications.filter(n => !this.isFromUnfamiliar(n));
+    },
+    unfamiliar() {
+      return this.notifications.filter(n => this.isFromUnfamiliar(n));
+    },
+    unfamiliarUnread() {
+      return this.unfamiliar.filter(n => !n.is_read).length;
+    },
     mentions() {
       // Warpnet emits "reply" (never "mention") when someone responds to you,
       // so the Mentions tab keys off replies too.
-      return this.notifications.filter(n => n.type === 'mention' || n.type === 'reply');
+      return this.familiar.filter(n => n.type === 'mention' || n.type === 'reply');
     },
     shown() {
+      if (this.mode === 'Unfamiliar') return this.unfamiliar;
       if (this.mode === 'Mentions') return this.mentions;
-      if (!this.typeFilter) return this.notifications;
-      return this.notifications.filter(n => n.type === this.typeFilter);
+      if (!this.typeFilter) return this.familiar;
+      return this.familiar.filter(n => n.type === this.typeFilter);
+    },
+    emptyTitle() {
+      if (this.mode === 'Mentions') return 'No mentions yet';
+      if (this.mode === 'Unfamiliar') return 'Nothing from unfamiliar people';
+      return 'No notifications yet';
     },
     typeFilterLabel() {
       return TYPE_FILTERS.find(([type]) => type === this.typeFilter)[1];
@@ -453,6 +482,19 @@ export default {
       this.settingsOpen = false;
       await this.markAllRead();
     },
+    isFromUnfamiliar(n) {
+      return Boolean(n && SOCIAL_TYPES.has(n.type) && this.unfamiliarActors[n.actor_id] === true);
+    },
+    // Until its answer arrives a notification stays in the main list.
+    hydrateFamiliarity(list) {
+      const ids = new Set((list || []).map(n => n && n.actor_id).filter(id => id && !(id in this.unfamiliarActors)));
+      ids.forEach((id) => {
+        this.unfamiliarActors[id] = false;
+        warpnetService.isUnfamiliar(id)
+          .then((isUnfamiliar) => { this.unfamiliarActors[id] = isUnfamiliar; })
+          .catch(() => {});
+      });
+    },
     avatarFor(actorId) {
       return this.actorAvatars[actorId] || '/default_profile.png';
     },
@@ -466,6 +508,7 @@ export default {
         this.notifications = this.notifications.concat(older);
         this.nextCursor = (resp && resp.cursor) || 'end';
         this.hydrateAvatars(older);
+        this.hydrateFamiliarity(older);
         this.hydrateTweets(older);
       } catch (err) {
         console.error('Failed to load more notifications:', err);
@@ -581,6 +624,7 @@ export default {
         this.notifications = resp.notifications.filter(Boolean);
         this.nextCursor = resp.cursor || 'end';
         this.hydrateAvatars(this.notifications);
+        this.hydrateFamiliarity(this.notifications);
         this.hydrateTweets(this.notifications);
       }
       warpnetService.markAllNotificationsRead().catch(() => {});
@@ -608,6 +652,7 @@ export default {
         readIds.has(n.id) ? { ...n, is_read: true } : n
       ).concat(this.notifications.filter((n) => !incomingIds.has(n.id)));
       this.hydrateAvatars(this.notifications);
+      this.hydrateFamiliarity(this.notifications);
       this.hydrateTweets(this.notifications);
     });
   },

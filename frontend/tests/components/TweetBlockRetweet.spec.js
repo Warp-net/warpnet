@@ -3,6 +3,8 @@ import { render, waitFor, fireEvent } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
+    isTrusted: vi.fn(() => Promise.resolve(true)),
+    isStrangerMediaShown: vi.fn(() => false),
     getProfile: vi.fn(),
     getImage: vi.fn(),
     getOwnerProfile: vi.fn(),

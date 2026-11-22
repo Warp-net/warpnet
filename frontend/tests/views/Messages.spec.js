@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
+    isUnfamiliar: vi.fn(() => Promise.resolve(false)),
+    acceptChat: vi.fn(),
+    circleFirst: vi.fn((users) => Promise.resolve(users || [])),
     getOwnerProfile: vi.fn(),
     getProfile: vi.fn(),
     getImage: vi.fn(),

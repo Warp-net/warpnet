@@ -203,7 +203,8 @@ export default {
     // section has its fill or the feed ends.
     let cursorReset = true;
     for (let round = 0; round < 5; round++) {
-      const batch = await warpnetService.getWhoToFollow(cursorReset, sectionLimit * 2);
+      // Friends of friends first; the order within each part is the node's.
+      const batch = await warpnetService.circleFirst(await warpnetService.getWhoToFollow(cursorReset, sectionLimit * 2));
       cursorReset = false;
       if (!batch || batch.length === 0) {
         break;

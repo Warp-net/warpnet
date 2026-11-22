@@ -154,7 +154,9 @@ export default {
       try {
         const resp = await warpnetService.searchUsers(this.query, reset ? '' : this.cursor);
         if (seq !== this._seq) return;
-        const users = resp?.users || [];
+        // People in the circle come first within each page.
+        const users = await warpnetService.circleFirst(resp?.users || []);
+        if (seq !== this._seq) return;
         // Results render immediately; each row's avatar is loaded by the
         // User component itself, so one hanging blob can't hold the list.
         this.results = reset ? users : this.results.concat(users);

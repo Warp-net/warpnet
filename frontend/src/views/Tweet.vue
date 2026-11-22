@@ -65,7 +65,16 @@
 
         <div v-if="replies.length > 0" class="border-t border-lighter">
           <div class="px-5 py-3 text-sm text-dark">Replies</div>
-          <TweetBlock v-for="r in replies" :key="r.id" :tweet="r" :ownRootId="ownRootId" />
+          <TweetBlock v-for="r in familiarReplies" :key="r.id" :tweet="r" :ownRootId="ownRootId" />
+          <button
+            v-if="unfamiliarReplies.length > 0 && !showUnfamiliarReplies"
+            type="button"
+            class="flat-btn w-full px-5 py-3 text-sm text-blue text-left border-t border-lighter hover:bg-lightest"
+            @click="showUnfamiliarReplies = true"
+          >Show {{ unfamiliarReplies.length }} {{ unfamiliarReplies.length === 1 ? 'reply' : 'replies' }} from unfamiliar people</button>
+          <template v-if="showUnfamiliarReplies">
+            <TweetBlock v-for="r in unfamiliarReplies" :key="r.id" :tweet="r" :ownRootId="ownRootId" />
+          </template>
         </div>
       </div>
     </div>
@@ -101,6 +110,8 @@ export default {
       replyText: '',
       posting: false,
       showEmojiPicker: false,
+      unfamiliarRepliers: {},
+      showUnfamiliarReplies: false,
     };
   },
   watch: {
@@ -110,6 +121,14 @@ export default {
     },
   },
   computed: {
+    // Under the owner's own thread, replies from people outside the circle
+    // fold below the rest.
+    familiarReplies() {
+      return this.replies.filter((r) => !this.isUnfamiliarReply(r));
+    },
+    unfamiliarReplies() {
+      return this.replies.filter((r) => this.isUnfamiliarReply(r));
+    },
     canReply() {
       return acceptsReplies(this.tweet);
     },
@@ -122,6 +141,18 @@ export default {
     },
   },
   methods: {
+    isUnfamiliarReply(reply) {
+      return Boolean(this.ownRootId && reply && this.unfamiliarRepliers[reply.user_id] === true);
+    },
+    checkRepliers(replies) {
+      new Set(replies.map((r) => r && r.user_id).filter(Boolean)).forEach((userId) => {
+        if (userId in this.unfamiliarRepliers) return;
+        this.unfamiliarRepliers[userId] = false;
+        warpnetService.isUnfamiliar(userId)
+          .then((isUnfamiliar) => { this.unfamiliarRepliers[userId] = isUnfamiliar; })
+          .catch(() => {});
+      });
+    },
     insertEmoji(emoji) {
       const field = this.$refs.replyBox;
       const next = insertEmoji({
@@ -195,6 +226,7 @@ export default {
           cursorReset: true,
         });
         this.replies = Array.isArray(repliesPage) ? repliesPage : (repliesPage?.replies || []);
+        this.checkRepliers(this.replies);
       } catch (err) {
         console.error('Failed to load replies:', err);
       }

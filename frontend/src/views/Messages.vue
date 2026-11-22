@@ -41,6 +41,19 @@ resulting from the use or misuse of this software.
       <Loader :loading="loading" />
 
       <template v-if="!loading">
+        <button
+          v-if="requestChats.length > 0 || isShowingRequests"
+          type="button"
+          class="flat-btn w-full text-left px-4 py-3 border-b border-lighter hover:bg-lightest flex items-center"
+          @click="showRequests = !isShowingRequests"
+        >
+          <i class="fas mr-3 text-blue" :class="isShowingRequests ? 'fa-arrow-left' : 'fa-inbox'" aria-hidden="true"></i>
+          <span class="font-semibold">{{ isShowingRequests ? 'Back to chats' : 'Message requests' }}</span>
+          <span v-if="!isShowingRequests" class="ml-auto text-sm text-dark">{{ requestChats.length }}</span>
+        </button>
+        <p v-if="isShowingRequests" class="px-4 py-2 text-xs text-dark border-b border-lighter">
+          From people outside your circle. Replying moves a chat to your chats.
+        </p>
         <div v-if="visibleChats.length === 0" class="flex flex-col items-center justify-center pt-10">
           <p class="font-bold text-lg">No chats yet</p>
           <p class="text-sm text-dark">Wait until someone starts a chat here.</p>
@@ -340,6 +353,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {isBridgedUser} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
+import chatRequests from "@/lib/chat-requests.mixin";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {pastedFiles} from "@/lib/clipboard";
 import {acceptedVideoAccept, captureVideoPoster, checkVideoLength, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
@@ -352,6 +366,7 @@ const maxMessageImages = 4;
 
 export default {
   name: "Messages",
+  mixins: [chatRequests],
   components: {
     UserStatusDot,
     SideNav: defineAsyncComponent(() => import('@/components/SideNav.vue')),
@@ -405,7 +420,7 @@ export default {
     // instead of rendering as a clickable "Anonymous" row.
     // Unread chats float to the top; within each group the freshest
     // message comes first.
-    visibleChats() {
+    listedChats() {
       return this.chats
         .filter((chat) => this.usersMap.has(chat.other_user_id))
         .map((chat) => ({ ...chat, unread: this.isUnread(chat) }))
@@ -641,6 +656,7 @@ export default {
             await this.uploadVideoAttachment(sentVideo.file, sentVideoPoster));
         }
         await this.deliverMessage(sentText, sentImages, sentImageKeys, sentVideoKey, sentVideoPosterKey);
+        this.acceptChatWith(this.active.other_user_id);
         // The local node accepted the message (queued to its outbox and
         // re-sent when the recipient comes online), so it's safe to clear
         // the composer now.
@@ -758,6 +774,7 @@ export default {
         return;
       }
       this.showNewMessageModal = false;
+      this.acceptChatWith(user.id);
 
       let currentChat = null
       for (const chat of this.chats) {
@@ -784,6 +801,7 @@ export default {
       }
       this.messages = []; // reset messages
       this.active = chat;
+      this.checkFamiliarity(chat.other_user_id);
       warpnetService.markChatRead(chat.id);
 
       const messages = await warpnetService.getDirectMessages(
@@ -903,6 +921,7 @@ export default {
         if (uid && !this.usersMap.has(uid) && !isBridgedUser({id: uid})) {
           this.usersMap.set(uid, {id: uid});
         }
+        this.checkFamiliarity(uid);
       }
       return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
     },

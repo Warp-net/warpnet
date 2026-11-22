@@ -37,6 +37,8 @@ import site.warpnet.transport.dto.GetFollowingsEvent
 import site.warpnet.transport.dto.GetIsFollowingEvent
 import site.warpnet.transport.dto.GetNotificationsEvent
 import site.warpnet.transport.dto.GetNotificationsResponse
+import site.warpnet.transport.dto.GetTrustEvent
+import site.warpnet.transport.dto.GetTrustResponse
 import site.warpnet.transport.dto.GetTweetEvent
 import site.warpnet.transport.dto.GetTweetStatsEvent
 import site.warpnet.transport.dto.GetUserEvent
@@ -46,6 +48,7 @@ import site.warpnet.transport.dto.ReactionEvent
 import site.warpnet.transport.dto.ReactionsCountResponse
 import site.warpnet.transport.dto.NewFollowEvent
 import site.warpnet.transport.dto.NewUnfollowEvent
+import site.warpnet.transport.dto.Trust
 import site.warpnet.transport.dto.TweetStatsResponse
 import site.warpnet.transport.dto.TweetsResponse
 import site.warpnet.transport.dto.UnretweetEvent
@@ -101,6 +104,8 @@ class WarpnetRepository @Inject constructor(
     private val getAllUsersAdapter = moshi.adapter<GetAllUsersEvent>()
     private val getTweetAdapter = moshi.adapter<GetTweetEvent>()
     private val getTweetStatsAdapter = moshi.adapter<GetTweetStatsEvent>()
+    private val getTrustAdapter = moshi.adapter<GetTrustEvent>()
+    private val trustRespAdapter = moshi.adapter<GetTrustResponse>()
     private val getNotifsAdapter = moshi.adapter<GetNotificationsEvent>()
     private val getNotifAdapter = moshi.adapter<site.warpnet.transport.dto.GetNotificationEvent>()
     private val markNotifReadAdapter = moshi.adapter<site.warpnet.transport.dto.MarkNotificationReadEvent>()
@@ -260,6 +265,20 @@ class WarpnetRepository @Inject constructor(
             myReaction = stats.myReaction,
             reacted = stats.myReaction.isNotEmpty(),
         )
+    }
+
+    /**
+     * Where the paired node places each author in its owner's trust circle.
+     * An author missing from the answer counts as trusted, so a node that
+     * predates the route blurs nothing.
+     */
+    suspend fun getTrust(userIds: List<String>): Map<String, Trust> {
+        if (userIds.isEmpty()) return emptyMap()
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_TRUST,
+            getTrustAdapter.toJson(GetTrustEvent(userIds = userIds)),
+        )
+        return trustRespAdapter.fromJson(raw)?.users.orEmpty()
     }
 
     suspend fun getTweetStats(tweetId: String, userId: String): TweetStatsResponse {
@@ -1479,9 +1498,19 @@ class WarpnetRepository @Inject constructor(
                 }
             }
 
+        // Media from authors outside the owner's trust circle is marked
+        // sensitive, so the existing sensitive-media blur covers it.
+        val mediaAuthors = tweets
+            .filter { !it.imageKeys.isNullOrEmpty() || !it.videoKey.isNullOrEmpty() }
+            .map { it.userId }
+            .distinct()
+            .take(100) // the node's batch limit
+        val trustJob = async { runCatching { getTrust(mediaAuthors) }.getOrNull().orEmpty() }
+
         val baseTweets: suspend (WarpnetTweet) -> Tweet = { t ->
             val base = t.toTweet(resolveUser(t.userId, cache))
-            attachPoll(t, attachQuote(t, base, quoteJobs), pollJobs)
+            val isStranger = trustJob.await()[t.userId]?.isTrusted == false
+            attachPoll(t, attachQuote(t, base.copy(sensitive = isStranger), quoteJobs), pollJobs)
         }
 
         if (viewerId.isBlank()) {

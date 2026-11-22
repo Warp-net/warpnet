@@ -378,6 +378,15 @@ type UserModeration struct {
 	TimeAt      time.Time `json:"time_at"`
 }
 
+// Trust is how the viewer's node places a user in its owner's trust
+// circle. It is relative to the viewer, so it is never stored on a tweet
+// or a user, nor replicated.
+type Trust struct {
+	IsTrusted bool    `json:"is_trusted"`
+	Score     float64 `json:"score"`
+	Vouchers  int     `json:"vouchers"`
+}
+
 type NotificationType string
 
 func (n NotificationType) String() string {

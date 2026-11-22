@@ -119,7 +119,7 @@ export default {
       }
       this.loadingMore = true;
       try {
-        const users = await warpnetService.getWhoToFollow(false);
+        const users = await warpnetService.circleFirst(await warpnetService.getWhoToFollow(false));
         if (!users || users.length === 0) {
           this.hasMore = false;
           return;
@@ -135,7 +135,8 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     try {
-      const users = await warpnetService.getWhoToFollow(true);
+      // Friends of friends first; the order within each part is the node's.
+      const users = await warpnetService.circleFirst(await warpnetService.getWhoToFollow(true));
       this.profiles = users || [];
       if (this.profiles.length === 0) {
         this.hasMore = false;
