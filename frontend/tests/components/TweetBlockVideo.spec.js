@@ -11,6 +11,8 @@ vi.mock('@/service/service', () => ({
     hasReactor: vi.fn(),
     hasRetweeter: vi.fn(),
     viewTweet: vi.fn(),
+    isTrusted: vi.fn(),
+    isStrangerMediaShown: vi.fn(),
   },
 }));
 
@@ -40,6 +42,8 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  warpnetService.isTrusted.mockResolvedValue(true);
+  warpnetService.isStrangerMediaShown.mockReturnValue(false);
   warpnetService.getProfile.mockResolvedValue({id: 'author1', username: 'author', avatar_key: ''});
   warpnetService.getImage.mockResolvedValue(null);
   warpnetService.getVideo.mockResolvedValue({

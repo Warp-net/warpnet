@@ -59,6 +59,13 @@ resulting from the use or misuse of this software.
         <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn truncate min-w-0 text-left">
           {{ authorName || 'Anonymous' }}
         </button>
+        <i
+            v-if="isTrustedAuthor"
+            class="fas fa-medal ml-1 flex-none text-[#7a5f22] dark:text-darktheme-gold"
+            title="In your circle"
+            aria-label="In your circle"
+            role="img"
+        ></i>
         <p class="hidden md:block text-sm text-dark ml-2 truncate min-w-0">
           @{{ shortHandle(tweet.user_id) }}
         </p>
@@ -226,6 +233,20 @@ resulting from the use or misuse of this software.
           <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
         </template>
       </div>
+      <div
+          v-if="isStrangerMedia"
+          class="mt-2 rounded-lg border border-lighter p-4 text-sm text-dark flex items-center justify-between"
+      >
+        <span>
+          <i class="fas fa-eye-slash mr-1" aria-hidden="true"></i>
+          Media from an unfamiliar author
+        </span>
+        <button
+            @click.stop="revealMedia"
+            type="button"
+            class="ml-2 underline hover:text-blue"
+        >Show</button>
+      </div>
       <div v-if="galleryImages.length === 1" class="mt-2">
         <img
             :src="galleryImages[0]"
@@ -246,7 +267,7 @@ resulting from the use or misuse of this software.
         <img v-for="(img, i) in galleryImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
       </div>
       <YoutubeEmbed v-if="youtubeId" :videoId="youtubeId" />
-      <div v-if="hasVideo" class="mt-2">
+      <div v-if="hasVideo && !isStrangerMedia" class="mt-2">
         <video
             v-if="videoSrc"
             :src="videoSrc"
@@ -550,6 +571,8 @@ export default {
       repliesCount: new Map(),
       viewsCount: new Map(),
       tweetImages: [],
+      isStrangerMedia: false,
+      isTrustedAuthor: false,
       videoSrc: '',
       videoLoading: false,
       videoError: '',
@@ -776,6 +799,26 @@ export default {
       this.tweet.image_keys = full.image_keys || [];
       this.tweet.video_key = full.video_key;
       this.loadImages();
+    },
+    // A stranger's media is not even fetched until the owner asks, so it
+    // never lands on this node uninvited. An unanswered trust question
+    // blurs nothing and awards no medal.
+    async loadMedia() {
+      const isTrusted = this.isOwner ? null : await warpnetService.isTrusted(this.tweet.user_id);
+      this.isTrustedAuthor = isTrusted === true;
+      const hasMedia = (this.tweet.image_keys || []).length > 0 || this.hasVideo;
+      if (hasMedia && isTrusted === false && !warpnetService.isStrangerMediaShown()) {
+        this.isStrangerMedia = true;
+        return;
+      }
+      this.revealMedia();
+    },
+    revealMedia() {
+      this.isStrangerMedia = false;
+      this.loadImages();
+      if (this.tweet.video_key && this.autoloadVideo) {
+        this.loadVideo();
+      }
     },
     loadImages() {
       const imageKeys = this.tweet.image_keys || [];
@@ -1433,13 +1476,10 @@ export default {
     // one failed element must not take its siblings down with it.
     this.loadAuthor();
     this.loadRetweeterLabel();
-    this.loadImages();
+    this.loadMedia();
     if (this.isLocked) {
       this.loadSponsoredContent()
           .catch(err => console.warn(`failed to load sponsored tweet [${this.tweet.id}]`, err));
-    }
-    if (this.tweet.video_key && this.autoloadVideo) {
-      this.loadVideo();
     }
 
     this.loadTweetStats(this.tweet.id, this.tweet.user_id)

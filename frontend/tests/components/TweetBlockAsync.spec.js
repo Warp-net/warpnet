@@ -11,6 +11,8 @@ vi.mock('@/service/service', () => ({
     hasRetweeter: vi.fn(),
     hasBookmark: vi.fn(),
     viewTweet: vi.fn(),
+    isTrusted: vi.fn(),
+    isStrangerMediaShown: vi.fn(),
   },
 }));
 
@@ -42,6 +44,8 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  warpnetService.isTrusted.mockResolvedValue(true);
+  warpnetService.isStrangerMediaShown.mockReturnValue(false);
   warpnetService.getProfile.mockResolvedValue({ id: 'author1', username: 'author', avatar_key: '' });
   warpnetService.getImage.mockResolvedValue(null);
   warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1' });
@@ -123,5 +127,66 @@ describe('TweetBlock per-element loading', () => {
       expect(imgs).toHaveLength(1);
       expect(imgs[0]).toHaveAttribute('src', 'data:image/png;base64,one');
     });
+  });
+
+  it('does not fetch a stranger\'s images until the owner asks', async () => {
+    warpnetService.isTrusted.mockResolvedValue(false);
+    warpnetService.getImage.mockResolvedValue('data:image/png;base64,one');
+
+    renderTweet({ ...baseTweet, image_keys: ['k1'] });
+
+    const show = await screen.findByText('Show');
+    expect(screen.getByText('Media from an unfamiliar author')).toBeInTheDocument();
+    expect(warpnetService.getImage).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'k1' }));
+    expect(warpnetService.isTrusted).toHaveBeenCalledWith('author1');
+
+    show.click();
+    await waitFor(() => {
+      expect(screen.getByAltText('Tweet image')).toHaveAttribute('src', 'data:image/png;base64,one');
+    });
+  });
+
+  it('shows a stranger\'s images at once when the owner opted in', async () => {
+    warpnetService.isStrangerMediaShown.mockReturnValue(true);
+    warpnetService.isTrusted.mockResolvedValue(false);
+    warpnetService.getImage.mockResolvedValue('data:image/png;base64,one');
+
+    renderTweet({ ...baseTweet, image_keys: ['k1'] });
+
+    expect(await screen.findByAltText('Tweet image')).toHaveAttribute('src', 'data:image/png;base64,one');
+  });
+
+  it('awards a trusted author the medal', async () => {
+    renderTweet(baseTweet);
+    expect(await screen.findByRole('img', { name: 'In your circle' })).toBeInTheDocument();
+  });
+
+  it('awards no medal to a stranger or when the node did not answer', async () => {
+    for (const answer of [false, null]) {
+      warpnetService.isTrusted.mockResolvedValue(answer);
+      const { unmount } = renderTweet(baseTweet);
+      await waitFor(() => expect(warpnetService.isTrusted).toHaveBeenCalled());
+      await Promise.resolve();
+      expect(screen.queryByRole('img', { name: 'In your circle' })).toBeNull();
+      unmount();
+      warpnetService.isTrusted.mockClear();
+    }
+  });
+
+  it('shows media at once when the node did not answer', async () => {
+    warpnetService.isTrusted.mockResolvedValue(null);
+    warpnetService.getImage.mockResolvedValue('data:image/png;base64,one');
+
+    renderTweet({ ...baseTweet, image_keys: ['k1'] });
+
+    expect(await screen.findByAltText('Tweet image')).toHaveAttribute('src', 'data:image/png;base64,one');
+  });
+
+  it('awards no medal on the owner\'s own tweet', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'author1' });
+    renderTweet(baseTweet);
+    await screen.findByText('hello world');
+    expect(warpnetService.isTrusted).not.toHaveBeenCalled();
+    expect(screen.queryByRole('img', { name: 'In your circle' })).toBeNull();
   });
 });

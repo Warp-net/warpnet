@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
+    isUnfamiliar: vi.fn(() => Promise.resolve(false)),
+    acceptChat: vi.fn(),
+    circleFirst: vi.fn((users) => Promise.resolve(users || [])),
     getOwnerProfile: vi.fn(),
     getNotifications: vi.fn(),
     getProfile: vi.fn(),
@@ -64,9 +67,33 @@ beforeEach(() => {
   warpnetService.markNotificationRead.mockResolvedValue({});
   warpnetService.markAllNotificationsRead.mockResolvedValue({});
   warpnetService.subscribeNotifications.mockReturnValue(() => {});
+  warpnetService.isUnfamiliar.mockImplementation(() => Promise.resolve(false));
 });
 
 describe('Notifications.vue', () => {
+  it('moves notifications from unfamiliar people to their own tab', async () => {
+    warpnetService.isUnfamiliar.mockImplementation((id) => Promise.resolve(id === 'sam'));
+    warpnetService.getNotifications.mockResolvedValue({
+      unread_count: 3,
+      notifications: [
+        { id: 'n1', type: 'follow', actor_id: 'bob', text: 'bob started following you', is_read: false },
+        { id: 'n2', type: 'reply', actor_id: 'sam', text: 'sam replied to your tweet', is_read: false },
+        { id: 'n3', type: 'moderation', actor_id: 'sam', text: 'Your tweet was reviewed', is_read: false },
+      ],
+    });
+    renderNotifications();
+
+    expect(await screen.findByText(/bob started following you/)).toBeInTheDocument();
+    const tab = await screen.findByRole('button', { name: /Unfamiliar/ });
+    expect(tab).toHaveTextContent('1');
+    expect(screen.queryByText(/sam replied to your tweet/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Your tweet was reviewed/)).toBeInTheDocument();
+
+    await fireEvent.click(tab);
+    expect(await screen.findByText(/sam replied to your tweet/)).toBeInTheDocument();
+    expect(screen.queryByText(/bob started following you/)).not.toBeInTheDocument();
+  });
+
   it('renders the Notifications header and tabs', async () => {
     renderNotifications();
 

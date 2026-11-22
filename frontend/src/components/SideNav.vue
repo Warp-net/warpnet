@@ -533,12 +533,24 @@ export default {
       this.profile.avatar = null;
     }
 
-    this.unsubscribeNotifications = warpnetService.subscribeNotifications((resp) => {
-      const items = (resp && resp.notifications) || [];
-      const unreadMessages = items.filter((n) => n && n.type === 'message' && !n.is_read).length;
+    // Unread items from unfamiliar people wait in their own tab and do not
+    // light the badges. Only the first page is known here, so older unread
+    // ones still count.
+    let badgeSeq = 0;
+    this.unsubscribeNotifications = warpnetService.subscribeNotifications(async (resp) => {
+      const seq = ++badgeSeq;
+      const unread = ((resp && resp.notifications) || []).filter((n) => n && !n.is_read);
+      const isUnfamiliar = await Promise.all(unread.map((n) =>
+        n.actor_id && n.type !== 'moderation' && n.type !== 'order_limit'
+          ? warpnetService.isUnfamiliar(n.actor_id)
+          : false));
+      if (seq !== badgeSeq) return;
+      const messages = unread.filter((n) => n.type === 'message').length;
+      const familiarMessages = unread.filter((n, i) => n.type === 'message' && !isUnfamiliar[i]).length;
+      const unfamiliarOthers = unread.filter((n, i) => n.type !== 'message' && isUnfamiliar[i]).length;
       const onMessages = this.$route && (this.$route.name === 'Chats' || this.$route.name === 'Messages');
-      this.newMessages = onMessages ? 0 : unreadMessages;
-      this.newNotifications = Math.max(0, (resp.unread_count || 0) - unreadMessages);
+      this.newMessages = onMessages ? 0 : familiarMessages;
+      this.newNotifications = Math.max(0, (resp.unread_count || 0) - messages - unfamiliarOthers);
     });
 
     await warpnetService.getNotifications(true)

@@ -100,6 +100,7 @@ export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/t
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
 export const PRIVATE_GET_RATING = "/private/get/admin/rating/0.0.0"
+export const PRIVATE_GET_TRUST = "/private/get/trust/0.0.0"
 export const PRIVATE_GET_DEVICES = "/private/get/admin/devices/0.0.0"
 export const PRIVATE_DELETE_DEVICE = "/private/delete/admin/device/0.0.0"
 export const PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
@@ -147,6 +148,16 @@ const stateMap = new Map();
 // sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
 const DATA_SAVER_STORAGE_KEY = "warpnet.datasaver";
+const STRANGER_MEDIA_STORAGE_KEY = "warpnet.strangermedia";
+
+// The node answers trust from memory; a short cache only spares a request
+// per tweet when the same authors repeat down a timeline.
+const TRUST_CACHE_TTL_MS = 5 * 60 * 1000;
+const TRUST_BATCH_DELAY_MS = 20;
+const TRUST_BATCH_MAX = 100;
+const trustCache = new Map(); // userId -> {isTrusted, at}
+let trustQueue = new Map(); // userId -> resolvers waiting for the next batch
+let trustTimer = null;
 // sessionStorage key for the pairing QR; ephemeral (per-tab) so it survives a
 // reload without persisting the pairing secret to disk. Cleared on logout.
 const QR_STORAGE = "warpnet.qr";
@@ -2702,6 +2713,104 @@ export const warpnetService = {
         } catch (e) {
             return false;
         }
+    },
+
+    cacheStrangerMediaShown(enabled) {
+        try {
+            localStorage.setItem(STRANGER_MEDIA_STORAGE_KEY, enabled ? 'true' : 'false');
+        } catch (e) {
+            console.warn('failed to cache stranger media preference', e);
+        }
+    },
+
+    isStrangerMediaShown() {
+        try {
+            return localStorage.getItem(STRANGER_MEDIA_STORAGE_KEY) === 'true';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    // isTrusted tells whether an author is in the owner's trust circle:
+    // true, false, or null when the node could not answer. Authors asked
+    // for within one tick go to the node as one batch.
+    isTrusted(userId) {
+        const cached = trustCache.get(userId);
+        if (cached && Date.now() - cached.at < TRUST_CACHE_TTL_MS) {
+            return Promise.resolve(cached.isTrusted);
+        }
+        return new Promise((resolve) => {
+            const waiting = trustQueue.get(userId) || [];
+            waiting.push(resolve);
+            trustQueue.set(userId, waiting);
+            if (trustQueue.size >= TRUST_BATCH_MAX) {
+                this.flushTrust();
+            } else if (!trustTimer) {
+                trustTimer = setTimeout(() => this.flushTrust(), TRUST_BATCH_DELAY_MS);
+            }
+        });
+    },
+
+    async flushTrust() {
+        clearTimeout(trustTimer);
+        trustTimer = null;
+        const batch = trustQueue;
+        trustQueue = new Map();
+        if (batch.size === 0) return;
+
+        let users = {};
+        try {
+            const resp = await this.sendToNode({
+                path: PRIVATE_GET_TRUST,
+                body: {user_ids: [...batch.keys()]},
+            });
+            users = (resp && resp.users) || {};
+        } catch (err) {
+            console.warn('failed to get trust', err);
+        }
+        const now = Date.now();
+        for (const [userId, resolvers] of batch) {
+            const trust = users[userId];
+            const isTrusted = trust ? !!trust.is_trusted : null;
+            if (trust) trustCache.set(userId, {isTrusted, at: now});
+            resolvers.forEach((resolve) => resolve(isTrusted));
+        }
+    },
+
+    // A chat the owner started or answered keeps its other user familiar
+    // even outside the circle. Kept per viewer, like the read marks.
+    acceptChat(userId) {
+        try {
+            localStorage.setItem(`chat_accepted::${userId}`, 'true');
+        } catch (e) {
+            console.warn('failed to accept chat', e);
+        }
+    },
+
+    isChatAccepted(userId) {
+        try {
+            return localStorage.getItem(`chat_accepted::${userId}`) === 'true';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    // isUnfamiliar tells whether a user is outside the circle and not in an
+    // accepted chat. An unanswered trust lookup counts as familiar, so a
+    // failure never hides anything.
+    async isUnfamiliar(userId) {
+        if (!userId || this.isChatAccepted(userId)) return false;
+        return (await this.isTrusted(userId)) === false;
+    },
+
+    // circleFirst moves users in the circle ahead of the rest, keeping the
+    // order within each part.
+    async circleFirst(users) {
+        const list = (users || []).filter(Boolean);
+        const trusted = await Promise.all(list.map((u) => this.isTrusted(u.id)));
+        const inCircle = list.filter((_, i) => trusted[i] === true);
+        const rest = list.filter((_, i) => trusted[i] !== true);
+        return inCircle.concat(rest);
     },
 
     async getNodeInfo(){

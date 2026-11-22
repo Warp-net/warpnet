@@ -10,6 +10,7 @@ vi.mock('@/service/service', () => ({
     getReplies: vi.fn(),
     replyTweet: vi.fn(),
     isDataSaverEnabled: vi.fn(),
+    isUnfamiliar: vi.fn(),
   },
 }));
 
@@ -59,9 +60,36 @@ beforeEach(() => {
   });
   warpnetService.getReplies.mockResolvedValue([]);
   warpnetService.isDataSaverEnabled.mockReturnValue(true);
+  warpnetService.isUnfamiliar.mockImplementation((id) => Promise.resolve(id === 'stranger'));
 });
 
 describe('Tweet.vue', () => {
+  it('folds replies from unfamiliar people under the owner\'s own tweet', async () => {
+    warpnetService.getTweet.mockResolvedValue({ id: 't1', user_id: 'me', text: 'my tweet' });
+    warpnetService.getReplies.mockResolvedValue([
+      { id: 'r1', user_id: 'friend', text: 'friendly reply' },
+      { id: 'r2', user_id: 'stranger', text: 'spam reply' },
+    ]);
+    renderTweet();
+
+    expect(await screen.findByText('friendly reply')).toBeInTheDocument();
+    const more = await screen.findByRole('button', { name: 'Show 1 reply from unfamiliar people' });
+    expect(screen.queryByText('spam reply')).not.toBeInTheDocument();
+
+    more.click();
+    expect(await screen.findByText('spam reply')).toBeInTheDocument();
+  });
+
+  it('keeps every reply in place under someone else\'s tweet', async () => {
+    warpnetService.getReplies.mockResolvedValue([
+      { id: 'r2', user_id: 'stranger', text: 'spam reply' },
+    ]);
+    renderTweet();
+
+    expect(await screen.findByText('spam reply')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /unfamiliar people/ })).not.toBeInTheDocument();
+  });
+
   it('renders the fetched tweet', async () => {
     renderTweet();
 
