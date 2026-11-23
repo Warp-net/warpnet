@@ -297,6 +297,13 @@ resulting from the use or misuse of this software.
           Sign in by QR-code
         </button>
         <button
+          v-if="screenLock.isEnabled"
+          @click="lockNow"
+          class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm"
+        >
+          Lock screen <span class="text-dark">(Ctrl+L)</span>
+        </button>
+        <button
           @click="signOut"
           :disabled="signingOut"
           class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm text-red-600"
@@ -313,6 +320,7 @@ resulting from the use or misuse of this software.
 import QRCodeModal from "@/components/QRCodeModal.vue";
 import {warpnetService} from "@/service/service";
 import {startOnboarding} from "@/lib/onboarding";
+import {lockScreen, screenLock} from "@/lib/screen-lock";
 
 const walletPollEvery = 60000;
 const walletAssets = ["USDT", "TRX"];
@@ -326,6 +334,7 @@ export default {
     return {
       dropdown: false,
       signingOut: false,
+      screenLock,
       profile: {},
       newMessages: 0,
       newNotifications: 0,
@@ -477,6 +486,10 @@ export default {
         this.qrCode = warpnetService.getQR();
         this.qrPayload = warpnetService.getQRPayload();
         this.qrModalOpen = true;
+    },
+    lockNow() {
+      this.dropdown = false;
+      lockScreen();
     },
     async closeQR() {
       this.qrModalOpen = false

@@ -28,6 +28,7 @@ import {generateUUID} from "@/lib/uuid";
 import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop, SelectNetwork, Network} from "@/lib/transport";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {isOwnTweetEcho} from "@/lib/network";
+import {resetScreenLock} from "@/lib/screen-lock";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -402,6 +403,7 @@ export const warpnetService = {
         if (resp.code) {
             throw new Error(resp.message)
         }
+        resetScreenLock(resp.user_id)
         // Seed the owner profile from the flat AuthNodeInfo first so any
         // sendToNode call below has node_id/user_id available; getProfile
         // is fetched on a best-effort basis to back-fill the username.
