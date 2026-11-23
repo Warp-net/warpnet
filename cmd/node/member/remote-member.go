@@ -152,6 +152,7 @@ func main() {
 	)
 	defer func() {
 		if n != nil {
+			bridgeHandler.AttachNode(nil)
 			n.Stop()
 		}
 	}()

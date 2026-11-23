@@ -95,11 +95,14 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 		return err
 	}
 	repo.mx.Lock()
+	defer repo.mx.Unlock()
+	if repo.privateKey != nil && !repo.privateKey.Equal(pk) {
+		return local_store.ErrWrongPassword
+	}
 	if repo.sessionToken == "" {
 		repo.sessionToken = token
 	}
 	repo.privateKey = pk
-	repo.mx.Unlock()
 	return nil
 }
 

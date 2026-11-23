@@ -54,7 +54,6 @@ type fakeAuth struct {
 	mx            sync.Mutex
 	authenticated bool
 	logins        int
-	logouts       int
 	priv          ed25519.PrivateKey
 }
 
@@ -70,27 +69,11 @@ func (f *fakeAuth) AuthLogin(message event.LoginEvent, _ security.PSK) (event.Lo
 	f.mx.Lock()
 	defer f.mx.Unlock()
 	f.logins++
-	if f.authenticated {
-		return event.LoginResponse{}, errors.New("already authenticated")
-	}
 	if message.Username != testUsername || message.Password != testPassword {
 		return event.LoginResponse{}, errors.New("authentication failed")
 	}
 	f.authenticated = true
 	return event.LoginResponse{UserId: "owner-id", Token: "pairing-token", ID: "node-id"}, nil
-}
-
-func (f *fakeAuth) AuthLogout() {
-	f.mx.Lock()
-	defer f.mx.Unlock()
-	f.logouts++
-	f.authenticated = false
-}
-
-func (f *fakeAuth) Reset() {
-	f.mx.Lock()
-	defer f.mx.Unlock()
-	f.authenticated = false
 }
 
 func (f *fakeAuth) PrivateKey() ed25519.PrivateKey { return f.priv }
@@ -232,8 +215,8 @@ func TestBridge_UnknownClientCannotLogTheOwnerOut(t *testing.T) {
 	resp := attacker.send(t, event.PRIVATE_POST_LOGOUT, struct{}{})
 
 	assert.Equal(t, http.StatusUnauthorized, responseError(t, resp).Code)
-	assert.Zero(t, auth.logouts)
 	assert.True(t, auth.IsAuthenticated(), "the owner stays signed in")
+	assert.Equal(t, json.RawMessage(`{"ok":true}`), owner.send(t, event.PRIVATE_POST_TWEET, struct{}{}).Body)
 }
 
 func TestBridge_FirstRunProbeNeedsNoAuthorization(t *testing.T) {
@@ -288,8 +271,28 @@ func TestBridge_LogoutRevokesAuthorityUntilNextLogin(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized,
 		responseError(t, owner.send(t, event.PRIVATE_POST_TWEET, struct{}{})).Code)
+	reconnected := dial(t, srv, browser)
+	assert.Equal(t, http.StatusUnauthorized,
+		responseError(t, reconnected.send(t, event.PRIVATE_POST_TWEET, struct{}{})).Code,
+		"a logged-out browser key is no longer enrolled")
 	assert.Zero(t, node.callCount())
 
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 	assert.Equal(t, json.RawMessage(`{"ok":true}`), owner.send(t, event.PRIVATE_POST_TWEET, struct{}{}).Body)
+}
+
+func TestBridge_LogoutLeavesOtherOperatorsSignedIn(t *testing.T) {
+	srv, auth, _ := newTestBridge(t)
+
+	first := dial(t, srv, clientKey(t))
+	first.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
+	second := dial(t, srv, clientKey(t))
+	second.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
+
+	require.Equal(t, json.RawMessage(`["logged_out"]`), first.send(t, event.PRIVATE_POST_LOGOUT, struct{}{}).Body)
+
+	assert.True(t, auth.IsAuthenticated(), "the node keeps its owner signed in")
+	assert.Equal(t, json.RawMessage(`{"ok":true}`), second.send(t, event.PRIVATE_POST_TWEET, struct{}{}).Body)
+	assert.Equal(t, http.StatusUnauthorized,
+		responseError(t, first.send(t, event.PRIVATE_POST_TWEET, struct{}{})).Code)
 }

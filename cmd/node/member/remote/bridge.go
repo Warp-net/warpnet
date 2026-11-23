@@ -84,11 +84,9 @@ type Node interface {
 }
 
 // Authenticator is the slice of the auth service the dispatcher uses: log the
-// owner in and out, and sign self-stream requests with their key.
+// owner in and sign self-stream requests with their key.
 type Authenticator interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (event.LoginResponse, error)
-	AuthLogout()
-	Reset()
 	PrivateKey() ed25519.PrivateKey
 	IsAuthenticated() bool
 }
@@ -135,6 +133,12 @@ func (b *BridgeHandler) enroll(pub []byte) {
 	}
 	b.mx.Lock()
 	b.clients[string(pub)] = struct{}{}
+	b.mx.Unlock()
+}
+
+func (b *BridgeHandler) unenroll(pub []byte) {
+	b.mx.Lock()
+	delete(b.clients, string(pub))
 	b.mx.Unlock()
 }
 
@@ -268,8 +272,8 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 			resp.Body = newUnauthorizedResp()
 			break
 		}
-		b.auth.AuthLogout() // closes the database; the node keeps running
-		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
+		c.authorized.Store(false)
+		b.unenroll(c.static)
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
 		if !b.isAuthorized(c) {

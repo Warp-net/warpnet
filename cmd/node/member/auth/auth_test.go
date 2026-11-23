@@ -349,7 +349,7 @@ func TestAuthLogin_UserCreationFailureAborts(t *testing.T) {
 	assert.False(t, as.IsAuthenticated())
 }
 
-func TestAuthLogin_SecondLoginIsRefusedUntilReset(t *testing.T) {
+func TestAuthLogin_SecondLoginChecksTheStoreAgain(t *testing.T) {
 	repo := newFakeAuthRepo()
 	users := &fakeUserRepo{}
 	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
@@ -357,8 +357,11 @@ func TestAuthLogin_SecondLoginIsRefusedUntilReset(t *testing.T) {
 	_, err := as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{})
 	require.NoError(t, err)
 
-	_, err = as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{})
-	assert.ErrorIs(t, err, errAlreadyAuthenticated)
+	repo.authErr = errors.New("wrong username or password")
+	_, err = as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Wrong1234$"}, security.PSK{})
+	require.Error(t, err)
+	assert.Len(t, repo.authCalls, 2)
+	assert.True(t, as.IsAuthenticated(), "a failed second login keeps the owner signed in")
 
 	as.Reset()
 	assert.False(t, as.IsAuthenticated())
