@@ -117,10 +117,10 @@ function syncWatchers() {
 }
 
 // Every check counts against the attempts, the settings page included, so no
-// screen offers unlimited guesses.
+// screen offers unlimited guesses; once they run out only sign-out is left.
 async function checkPin(pin) {
   const config = load(configKey(ownerId));
-  if (!config) {
+  if (!config || screenLock.attemptsLeft <= 0) {
     return false;
   }
   const isMatch = (await hashPin(String(pin || ""), hexToBytes(config.salt))) === config.hash;
