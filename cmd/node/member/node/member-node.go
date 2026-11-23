@@ -1208,6 +1208,7 @@ func (m *MemberNode) Stop() {
 	if m == nil {
 		return
 	}
+	m.node.StopNode()
 
 	if m.trustCircle != nil {
 		m.trustCircle.Close()
@@ -1246,5 +1247,4 @@ func (m *MemberNode) Stop() {
 	if m.mw != nil {
 		m.mw.Close()
 	}
-	m.node.StopNode()
 }

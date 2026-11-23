@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ const (
 
 // watchingNode is a node that reports what it sees, with no libp2p under it.
 func watchingNode() *WarpNode {
-	return &WarpNode{events: warpnet.NewPeerEmitter()}
+	return &WarpNode{events: warpnet.NewPeerEmitter(), isClosed: new(atomic.Bool)}
 }
 
 // reportAbout runs one request through unwrap between two different peers

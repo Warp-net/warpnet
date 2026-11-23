@@ -104,6 +104,8 @@ type WarpNode struct {
 	isClosed *atomic.Bool
 	version  *semver.Version
 
+	requestsInFlight atomic.Int64
+
 	reachability atomic.Int64
 	prioritizer  Prioritizer
 	ratings      PeersRatings
@@ -197,7 +199,7 @@ func NewWarpNode(
 }
 
 func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
-	if n == nil || n.node == nil {
+	if n == nil || n.node == nil || n.isClosed.Load() {
 		return nil
 	}
 
@@ -265,6 +267,8 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 
 func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
+		n.requestsInFlight.Add(1)
+		defer n.requestsInFlight.Add(-1)
 		defer func() {
 			if r := recover(); r != nil {
 				log.Errorf("node: unwrap: panic: %v %s", r, debug.Stack())
@@ -282,6 +286,10 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
+			return
+		}
+		if n.isClosed.Load() {
+			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: warpnet.ErrNodeIsOffline.Error()})
 			return
 		}
 
@@ -461,7 +469,7 @@ func (n *WarpNode) trackIncomingEvents() {
 // manager, so a rating that moves while a peer stays connected is applied
 // without waiting for the peer to connect again.
 func (n *WarpNode) tagPeers() {
-	if n == nil || n.node == nil {
+	if n == nil || n.node == nil || n.isClosed.Load() {
 		return
 	}
 	for _, peerID := range n.node.Network().Peers() {
@@ -503,7 +511,7 @@ func (n *WarpNode) emitStream(s warpnet.WarpStream, t warpnet.PeerEventType) {
 }
 
 func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
-	if n == nil || n.node == nil || n.node.Network() == nil || n.node.Peerstore() == nil {
+	if n == nil || n.node == nil || n.isClosed.Load() || n.node.Network() == nil || n.node.Peerstore() == nil {
 		return warpnet.NodeInfo{}
 	}
 
@@ -530,7 +538,7 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 }
 
 func (n *WarpNode) Node() warpnet.P2PNode {
-	if n == nil || n.node == nil {
+	if n == nil || n.node == nil || n.isClosed.Load() {
 		return nil
 	}
 	return n.node
@@ -668,7 +676,7 @@ func (n *WarpNode) StopNode() {
 			log.Errorf("node: recovered: %v\n", r)
 		}
 	}()
-	if n == nil || n.node == nil {
+	if n == nil || n.node == nil || n.isClosed.Load() {
 		return
 	}
 
@@ -689,10 +697,11 @@ func (n *WarpNode) StopNode() {
 	if err := n.node.Close(); err != nil {
 		log.Errorf("node: failed to close: %v", err)
 	}
-	log.Infoln("node: stopped")
-
 	n.isClosed.Store(true)
-	n.node = nil
+	for n.requestsInFlight.Load() > 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	log.Infoln("node: stopped")
 
 	// pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 }
