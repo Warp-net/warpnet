@@ -59,7 +59,8 @@ resulting from the use or misuse of this software.
       </div>
     </div>
 
-    <router-view :key="$route.fullPath" />
+    <LockScreen v-if="isScreenLocked" />
+    <router-view v-else :key="$route.fullPath" />
 
     <ConfirmDialog
       :show="pendingUpdate !== null"
@@ -85,6 +86,8 @@ import {toast} from "@/lib/toast";
 import ToastHost from "@/components/ToastHost.vue";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import OnboardingTour from "@/components/OnboardingTour.vue";
+import LockScreen from "@/components/LockScreen.vue";
+import {attachScreenLock, screenLock} from "@/lib/screen-lock";
 
 const DEEP_LINK_EVENT = "deeplink:open";
 const LOG = "[warpnet-deeplink]";
@@ -101,10 +104,11 @@ function dismissedUpdate() {
 
 export default {
   name: "App",
-  components: { ToastHost, ConfirmDialog, OnboardingTour },
+  components: { ToastHost, ConfirmDialog, OnboardingTour, LockScreen },
   data() {
     return {
       connection,
+      screenLock,
       owner: warpnetService.getOwnerProfile(),
       unsubscribeOwner: null,
       bannerObserver: null,
@@ -113,6 +117,11 @@ export default {
     };
   },
   computed: {
+    // Only protected views are hidden: the login screen after an app restart
+    // asks for the password, which clears the lock anyway.
+    isScreenLocked() {
+      return this.screenLock.isLocked && this.$route.meta?.protected === true;
+    },
     // Held back until the owner is known: before login the node has not
     // reported its network yet, and the login screen is not the place for it.
     // A session restored from a login that predates the cached network carries
@@ -211,6 +220,7 @@ export default {
     // to the owner profile rather than read it once at mount.
     this.unsubscribeOwner = warpnetService.subscribeOwner((owner) => {
       this.owner = owner;
+      attachScreenLock(owner?.user_id);
     });
 
     if (this.$refs.banners) {

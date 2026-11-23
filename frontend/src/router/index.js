@@ -180,6 +180,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/screen-lock",
+    name: "SettingsScreenLock",
+    component: () =>
+      import(/* webpackChunkName: "settings-screen-lock" */ "../views/Settings/ScreenLock.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/settings/blocks",
     name: "SettingsBlocks",
     component: () =>
