@@ -447,7 +447,7 @@ func (repo *UserRepo) Delete(userId string) error {
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		Build() + local_store.Delimeter
+		Build()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -490,7 +490,7 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		Build() + local_store.Delimeter
+		Build()
 
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
@@ -593,10 +593,10 @@ func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string)
 	}
 
 	namespace := local_store.NewPrefixBuilder(UsersRepoName).AddSubPrefix(userSubNamespace)
-	legacy := namespace.AddRootID("None").Build() + local_store.Delimeter
-	prefixes := []local_store.DatabaseKey{legacy}
-	if network != "" && !strings.HasPrefix(from, legacy.String()) {
-		prefixes = []local_store.DatabaseKey{namespace.AddRootID(network).Build() + local_store.Delimeter, legacy}
+	none := namespace.AddRootID("None").Build()
+	prefixes := []local_store.DatabaseKey{none}
+	if network != "" && !strings.HasPrefix(from, none.String()) {
+		prefixes = []local_store.DatabaseKey{namespace.AddRootID(network).Build(), none}
 	}
 
 	txn, err := repo.db.NewTxn()

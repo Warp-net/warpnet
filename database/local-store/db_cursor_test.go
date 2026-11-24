@@ -156,3 +156,53 @@ func TestIterateRejectsFixedPrefix(t *testing.T) {
 		t.Fatal("expected reverse iterate fixed prefix error")
 	}
 }
+
+func TestScansStopAtTheSegmentBoundary(t *testing.T) {
+	db := newTestDB(t)
+	seedKeys(t, db, []string{"/U/nostr/1", "/U/nostr/2", "/U/nostrx/1", "/U/nostr", "/U/no/1"})
+	want := []string{"/U/nostr/1", "/U/nostr/2"}
+
+	for _, prefix := range []DatabaseKey{"/U/nostr", "/U/nostr/"} {
+		txn, err := db.NewTxn()
+		if err != nil {
+			t.Fatal(err)
+		}
+		limit := uint64(10)
+		items, _, err := txn.List(prefix, &limit, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var listed []string
+		for _, it := range items {
+			listed = append(listed, it.Key)
+		}
+		keys, _, err := txn.ListKeys(prefix, &limit, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reversed, _, err := txn.ReverseList(prefix, &limit, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var iterated, iteratedBack []string
+		if err := txn.IterateKeys(prefix, func(k string) error { iterated = append(iterated, k); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if err := txn.ReverseIterateKeys(prefix, func(k string) error { iteratedBack = append(iteratedBack, k); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		txn.Rollback()
+
+		for name, got := range map[string][]string{"List": listed, "ListKeys": keys, "IterateKeys": iterated} {
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s(%q) = %v, want %v", name, prefix, got, want)
+			}
+		}
+		if len(reversed) != 2 || reversed[0].Key != want[1] {
+			t.Errorf("ReverseList(%q) = %v", prefix, reversed)
+		}
+		if !reflect.DeepEqual(iteratedBack, []string{want[1], want[0]}) {
+			t.Errorf("ReverseIterateKeys(%q) = %v", prefix, iteratedBack)
+		}
+	}
+}

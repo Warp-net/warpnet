@@ -147,7 +147,7 @@ func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, 
 	defer txn.Rollback()
 
 	var keys []local_store.DatabaseKey
-	prefix := local_store.DatabaseKey(OrderRepoName + local_store.Delimeter)
+	prefix := local_store.DatabaseKey(OrderRepoName)
 	err = txn.IterateKeys(prefix, func(key string) error {
 		if strings.HasSuffix(key, local_store.Delimeter+buyerId) {
 			keys = append(keys, local_store.DatabaseKey(key))

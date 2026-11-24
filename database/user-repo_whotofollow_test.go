@@ -89,13 +89,13 @@ func TestResolveNetwork(t *testing.T) {
 		want string
 	}{
 		{"untagged ULID", domain.User{Id: native}, warpnet.WarpnetName},
-		{"untagged handle", domain.User{Id: "bob@legacy.example"}, ""},
+		{"untagged handle", domain.User{Id: "bob@nonet.example"}, ""},
 		{"untagged empty id", domain.User{}, ""},
 		{"untagged ULID one char short", domain.User{Id: native[:25]}, ""},
 		{"untagged ULID one char long", domain.User{Id: native + "0"}, ""},
 		{"untagged ULID with a letter Crockford forbids", domain.User{Id: "U" + native[1:]}, ""},
 		{"untagged ULID that overflows 128 bits", domain.User{Id: "8" + native[1:]}, ""},
-		{"warpnet tag on a handle", domain.User{Id: "bob@legacy.example", Network: warpnet.WarpnetName}, warpnet.WarpnetName},
+		{"warpnet tag on a handle", domain.User{Id: "bob@nonet.example", Network: warpnet.WarpnetName}, warpnet.WarpnetName},
 		{"testnet tag", domain.User{Id: "x", Network: "testnet"}, warpnet.WarpnetName},
 		{"mainnet tag", domain.User{Id: "x", Network: "mainnet"}, warpnet.WarpnetName},
 		{"bridged tag beats a ULID id", domain.User{Id: native, Network: "mastodon"}, "mastodon"},
@@ -439,18 +439,18 @@ func TestUserRowsLiveUnderTheirNetwork(t *testing.T) {
 		{Id: "b@threads.net", NodeId: "gateway", Network: "threads"},
 		{Id: "npub1x@nostr.com", NodeId: "gateway", Network: "nostr"},
 		{Id: native, NodeId: "node-1", Network: "testnet"},
-		{Id: "untagged@legacy.example", NodeId: "node-2"},
+		{Id: "untagged@nonet.example", NodeId: "node-2"},
 	} {
 		_, err := repo.Create(u)
 		require.NoError(t, err)
 	}
 
 	for id, root := range map[string]string{
-		"a@mastodon.social":       "/USERS/USER/mastodon/",
-		"b@threads.net":           "/USERS/USER/threads/",
-		"npub1x@nostr.com":        "/USERS/USER/nostr/",
-		native:                    "/USERS/USER/" + warpnet.WarpnetName + "/",
-		"untagged@legacy.example": "/USERS/USER/None/",
+		"a@mastodon.social":      "/USERS/USER/mastodon/",
+		"b@threads.net":          "/USERS/USER/threads/",
+		"npub1x@nostr.com":       "/USERS/USER/nostr/",
+		native:                   "/USERS/USER/" + warpnet.WarpnetName + "/",
+		"untagged@nonet.example": "/USERS/USER/None/",
 	} {
 		require.True(t, strings.HasPrefix(storedKeyOf(t, repo, id), root), id)
 		got, err := repo.Get(id)
@@ -478,7 +478,7 @@ func TestUserRowsLiveUnderTheirNetwork(t *testing.T) {
 		limit := uint64(100)
 		all, _, err := repo.List(&limit, nil)
 		require.NoError(t, err)
-		require.ElementsMatch(t, []string{"a@mastodon.social", "b@threads.net", native, "untagged@legacy.example"}, idsOfUsers(all))
+		require.ElementsMatch(t, []string{"a@mastodon.social", "b@threads.net", native, "untagged@nonet.example"}, idsOfUsers(all))
 
 		hits, _, err := repo.Search("threads", &limit, nil)
 		require.NoError(t, err)
@@ -487,7 +487,7 @@ func TestUserRowsLiveUnderTheirNetwork(t *testing.T) {
 }
 
 func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
-	t.Run("a network's own rows are found past any amount of old rows", func(t *testing.T) {
+	t.Run("a network's own rows are found past any amount of None rows", func(t *testing.T) {
 		repo := newWhoToFollowRepo(t)
 		putUsers(t, repo, bulkUsers("mastodon", "aaa", maxRecommendedScan+10)...)
 		_, err := repo.Create(domain.User{Id: "zzz@threads.net", NodeId: "gateway", Network: "threads"})
@@ -498,7 +498,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		require.Equal(t, []string{"zzz@threads.net"}, idsOfUsers(users))
 	})
 
-	t.Run("old rows of the network follow its own rows, each once", func(t *testing.T) {
+	t.Run("None rows of the network follow its own rows, each once", func(t *testing.T) {
 		repo := newWhoToFollowRepo(t)
 		for i := range 3 {
 			_, err := repo.Create(domain.User{Id: fmt.Sprintf("new%d@mastodon.social", i), NodeId: "gateway", Network: "mastodon"})
@@ -512,7 +512,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		require.Equal(t, []string{"new0@mastodon.social", "new1@mastodon.social", "new2@mastodon.social"}, ids[:3])
 	})
 
-	t.Run("a page that fills at the end of the own rows goes on with the old ones", func(t *testing.T) {
+	t.Run("a page that fills at the end of its own root goes on in None", func(t *testing.T) {
 		repo := newWhoToFollowRepo(t)
 		for i := range 2 {
 			_, err := repo.Create(domain.User{Id: fmt.Sprintf("new%d@mastodon.social", i), NodeId: "gateway", Network: "mastodon"})
@@ -524,7 +524,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		users, next, err := repo.WhoToFollow("mastodon", &limit, nil)
 		require.NoError(t, err)
 		require.Len(t, users, 2)
-		require.Equal(t, "/USERS/USER/None/", next)
+		require.Equal(t, "/USERS/USER/None", next)
 
 		rest, end, err := repo.WhoToFollow("mastodon", &limit, &next)
 		require.NoError(t, err)
@@ -532,7 +532,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		require.Equal(t, local_store.EndCursor, end)
 	})
 
-	t.Run("a budget spent on the own rows hands over to the old ones", func(t *testing.T) {
+	t.Run("a budget spent in its own root hands over to None", func(t *testing.T) {
 		repo := newWhoToFollowRepo(t)
 		rows := make(map[string][]byte, maxRecommendedScan)
 		for i := range maxRecommendedScan {
@@ -552,7 +552,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		users, next, err := repo.WhoToFollow("mastodon", nil, nil)
 		require.NoError(t, err)
 		require.Empty(t, users)
-		require.Equal(t, "/USERS/USER/None/", next)
+		require.Equal(t, "/USERS/USER/None", next)
 
 		users, end, err := repo.WhoToFollow("mastodon", nil, &next)
 		require.NoError(t, err)

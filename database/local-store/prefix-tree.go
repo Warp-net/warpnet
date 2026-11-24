@@ -164,6 +164,13 @@ func (k DatabaseKey) String() string {
 func (k DatabaseKey) Bytes() []byte {
 	return []byte(k)
 }
+
+func (k DatabaseKey) asPrefix() DatabaseKey {
+	if strings.HasSuffix(string(k), Delimeter) {
+		return k
+	}
+	return k + Delimeter
+}
 func (k DatabaseKey) DropId() string {
 	key := string(k)
 	lastColon := strings.LastIndex(key, Delimeter)
