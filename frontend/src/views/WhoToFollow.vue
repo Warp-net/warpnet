@@ -98,10 +98,13 @@ export default {
       loading: true,
       loadingMore: false,
       profiles: [],
-      hasMore: true,
+      cursors: {},
     };
   },
   computed: {
+    hasMore() {
+      return Object.keys(this.cursors).length > 0;
+    },
     sections() {
       return networkSections(this.profiles).map((s) => ({
         ...s,
@@ -113,18 +116,28 @@ export default {
     goHome() {
       this.$router.push("/");
     },
+    // Each network keeps its own cursor; one that ran out drops out.
+    addPages(pages) {
+      const cursors = {};
+      for (const [network, page] of Object.entries(pages)) {
+        for (const p of page.users) {
+          if (!this.profiles.some((x) => x.id === p.id)) {
+            this.profiles.push(p);
+          }
+        }
+        if (page.cursor) {
+          cursors[network] = page.cursor;
+        }
+      }
+      this.cursors = cursors;
+    },
     async loadMore() {
       if (!this.hasMore || this.loadingMore) {
         return;
       }
       this.loadingMore = true;
       try {
-        const users = await warpnetService.getWhoToFollow(false);
-        if (!users || users.length === 0) {
-          this.hasMore = false;
-          return;
-        }
-        this.profiles.push(...users);
+        this.addPages(await warpnetService.getWhoToFollow(this.cursors));
       } catch (err) {
         console.error("loading component:", this.$options.name, err);
       } finally {
@@ -135,11 +148,7 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     try {
-      const users = await warpnetService.getWhoToFollow(true);
-      this.profiles = users || [];
-      if (this.profiles.length === 0) {
-        this.hasMore = false;
-      }
+      this.addPages(await warpnetService.getWhoToFollow());
     } catch (err) {
       console.error("loading component:", this.$options.name, err);
     } finally {

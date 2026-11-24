@@ -70,7 +70,8 @@ type UserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Search(query string, limit *uint64, cursor *string) ([]domain.User, string, error)
-	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
+	WhoToFollow(network string, limit *uint64, cursor *string) ([]domain.User, string, error)
+	ListNetworks() ([]string, error)
 	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }

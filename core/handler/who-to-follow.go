@@ -7,7 +7,9 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	"strings"
+	"sync"
 )
 
 type WhoToFollowAuthStorer interface {
@@ -25,7 +27,7 @@ func StreamGetWhoToFollowHandler(
 	streamer UserStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.GetAllUsersEvent
+		var ev event.GetWhoToFollowEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
@@ -35,14 +37,25 @@ func StreamGetWhoToFollowHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		// Bridged accounts reach this node only from the gateway's suggestions.
-		if ev.UserId == streamer.NodeInfo().OwnerId && (ev.Cursor == nil || *ev.Cursor == "") {
-			go refreshUsers(userRepo, ev, streamer)
+		cursors := ev.Cursors
+		if len(cursors) == 0 && ev.Cursor != nil && *ev.Cursor != "" {
+			cursors = map[string]string{warpnet.WarpnetName: *ev.Cursor}
 		}
 
-		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
-		if err != nil {
-			return nil, err
+		// Bridged accounts reach this node only from the gateway's suggestions.
+		if ev.UserId == streamer.NodeInfo().OwnerId && len(cursors) == 0 {
+			go refreshUsers(userRepo, ev.GetAllUsersEvent, streamer)
+		}
+
+		if len(cursors) == 0 {
+			networks, err := userRepo.ListNetworks()
+			if err != nil {
+				return nil, err
+			}
+			cursors = make(map[string]string, len(networks))
+			for _, network := range networks {
+				cursors[network] = ""
+			}
 		}
 
 		followingsLimit := uint64(80) //nolint:mnd    // TODO limit?
@@ -69,44 +82,69 @@ func StreamGetWhoToFollowHandler(
 			}
 		}
 
-		whotofollow := make([]domain.User, 0, len(users))
-		latestByNode := make(map[string]int, len(users))
-		for _, user := range users {
-			if user.IsOffline { // exclude offline
-				continue
+		var (
+			g    errgroup.Group
+			mx   sync.Mutex
+			resp = event.WhoToFollowResponse{
+				Networks: make(map[string]event.UsersResponse, len(cursors)),
 			}
-			if bridge.IsFederatedWarpnet(user) {
-				continue
-			}
-
-			if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
-				continue
-			}
-			// if profile from Warpnet - don't show other network recommendations
-			if profile.Id != owner.UserId && profile.Network != user.Network {
-				continue
-			}
-			if _, ok := followedUsers[user.Id]; ok { // exclude already followed
-				continue
-			}
-
-			if user.NodeId != "" && !bridge.IsBridged(user.Network) {
-				if idx, ok := latestByNode[user.NodeId]; ok {
-					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
-						whotofollow[idx] = user
-					}
-					continue
+		)
+		for network, cursor := range cursors {
+			g.Go(func() error {
+				users, next, err := userRepo.WhoToFollow(network, ev.Limit, &cursor)
+				if err != nil {
+					return err
 				}
-			}
 
-			latestByNode[user.NodeId] = len(whotofollow)
+				whotofollow := make([]domain.User, 0, len(users))
+				latestByNode := make(map[string]int, len(users))
+				for _, user := range users {
+					if user.IsOffline { // exclude offline
+						continue
+					}
+					if bridge.IsFederatedWarpnet(user) {
+						continue
+					}
 
-			whotofollow = append(whotofollow, user)
+					if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
+						continue
+					}
+					// if profile from Warpnet - don't show other network recommendations
+					if profile.Id != owner.UserId && profile.Network != user.Network {
+						continue
+					}
+					if _, ok := followedUsers[user.Id]; ok { // exclude already followed
+						continue
+					}
+
+					if user.NodeId != "" && !bridge.IsBridged(user.Network) {
+						if idx, ok := latestByNode[user.NodeId]; ok {
+							if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
+								whotofollow[idx] = user
+							}
+							continue
+						}
+					}
+
+					latestByNode[user.NodeId] = len(whotofollow)
+
+					whotofollow = append(whotofollow, user)
+				}
+
+				mx.Lock()
+				resp.Networks[network] = event.UsersResponse{Cursor: next, Users: whotofollow}
+				mx.Unlock()
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return nil, err
 		}
 
-		return event.UsersResponse{
-			Cursor: cursor,
-			Users:  whotofollow,
-		}, nil
+		resp.UsersResponse = resp.Networks[warpnet.WarpnetName]
+		if resp.Users == nil {
+			resp.Users = []domain.User{}
+		}
+		return resp, nil
 	}
 }

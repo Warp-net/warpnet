@@ -198,23 +198,24 @@ export default {
    },
   async created() {
     console.log("loading component:", this.$options.name);
-    // Who-to-follow is always scoped to the signed-in owner. The backend
-    // returns both networks mixed, so keep paging (bounded) until each
-    // section has its fill or the feed ends.
-    let cursorReset = true;
+    // Every network comes with its own page and cursor; a network whose tab
+    // is still short after filtering gets its next page (bounded).
+    let cursors = {};
     for (let round = 0; round < 5; round++) {
-      const batch = await warpnetService.getWhoToFollow(cursorReset, sectionLimit * 2);
-      cursorReset = false;
-      if (!batch || batch.length === 0) {
-        break;
-      }
-      for (const p of batch) {
-        const group = this.groupFor(p);
-        if (group.length < sectionLimit) {
-          group.push(p);
+      const pages = await warpnetService.getWhoToFollow(cursors, sectionLimit * 2);
+      cursors = {};
+      for (const [network, page] of Object.entries(pages)) {
+        for (const p of page.users) {
+          const group = this.groupFor(p);
+          if (group.length < sectionLimit && !group.some((x) => x.id === p.id)) {
+            group.push(p);
+          }
+        }
+        if (network && page.cursor && this.groupOf(network).length < sectionLimit) {
+          cursors[network] = page.cursor;
         }
       }
-      if (Object.values(this.groups).every((g) => g.length >= sectionLimit)) {
+      if (Object.keys(cursors).length === 0) {
         break;
       }
     }

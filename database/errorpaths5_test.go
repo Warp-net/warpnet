@@ -31,6 +31,7 @@ package database
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
@@ -109,7 +110,16 @@ func TestUserRepoErrorPaths(t *testing.T) {
 			name: "WhoToFollow",
 			seed: seedUser,
 			run: func(s *faultStore) error {
-				_, _, err := NewUserRepo(s).WhoToFollow(nil, nil)
+				_, _, err := NewUserRepo(s).WhoToFollow(warpnet.WarpnetName, nil, nil)
+				return err
+			},
+			ops: []faultOp{op("List")},
+		},
+		{
+			name: "ListNetworks",
+			seed: seedUser,
+			run: func(s *faultStore) error {
+				_, err := NewUserRepo(s).ListNetworks()
 				return err
 			},
 			ops: []faultOp{op("List")},
@@ -212,7 +222,9 @@ func TestUserRepoErrorPaths(t *testing.T) {
 		require.Error(t, err)
 		_, _, err = repo.Search("alice", nil, nil)
 		require.Error(t, err)
-		_, _, err = repo.WhoToFollow(nil, nil)
+		_, _, err = repo.WhoToFollow(warpnet.WarpnetName, nil, nil)
+		require.Error(t, err)
+		_, err = repo.ListNetworks()
 		require.Error(t, err)
 		_, err = repo.GetBatch(userId)
 		require.Error(t, err)
@@ -300,7 +312,7 @@ func TestUserRepoErrorPaths(t *testing.T) {
 		require.Len(t, hits, 2)
 	})
 
-	t.Run("WhoToFollowPrefersNativeAndSkipsOffline", func(t *testing.T) {
+	t.Run("WhoToFollowSplitsByNetworkAndSkipsOffline", func(t *testing.T) {
 		s := newFaultStore(t)
 		repo := NewUserRepo(s)
 
@@ -313,20 +325,16 @@ func TestUserRepoErrorPaths(t *testing.T) {
 		require.NoError(t, err)
 
 		limit := uint64(10)
-		recommended, cur, err := repo.WhoToFollow(&limit, nil)
+		recommended, cur, err := repo.WhoToFollow(warpnet.WarpnetName, &limit, nil)
 		require.NoError(t, err)
 		require.Equal(t, local_store.EndCursor, cur)
-
-		ids := make([]string, 0, len(recommended))
-		for _, u := range recommended {
-			ids = append(ids, u.Id)
-		}
-		require.Contains(t, ids, nativeId)
-		require.Contains(t, ids, "not-a-ulid")
+		require.Len(t, recommended, 1)
 		require.Equal(t, nativeId, recommended[0].Id)
-		for _, u := range recommended {
-			require.False(t, u.IsOffline)
-		}
+
+		untagged, _, err := repo.WhoToFollow("", &limit, nil)
+		require.NoError(t, err)
+		require.Len(t, untagged, 1)
+		require.Equal(t, "not-a-ulid", untagged[0].Id)
 	})
 
 	t.Run("GetBatchSkipsMissing", func(t *testing.T) {

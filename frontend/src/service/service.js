@@ -532,45 +532,39 @@ export const warpnetService = {
         return usersResp.users;
     },
 
-    async getWhoToFollow(cursorReset, limit = defaultLimit) {
-        let cursor = this.getCursor('whotofollow')
-        if (cursorReset) {
-            cursor = ''
-        }
-        if (cursor === endCursor) {
-            return []
-        }
-
+    // Pages every network at once: {network: {users, cursor}}. Without
+    // cursors it is the first page of each; with them, the next page of only
+    // those networks. A null cursor means the network has no more.
+    async getWhoToFollow(cursors = {}, limit = defaultLimit) {
         // Who-to-follow is always scoped to the signed-in owner.
         const owner = this.getOwnerProfile()
         if (!owner || !owner.user_id) {
-            return []
+            return {}
         }
 
         const request = {
             path: PUBLIC_GET_WHOTOFOLLOW,
             body: {
                 limit: limit,
-                cursor: cursor,
+                cursors: cursors,
                 user_id: owner.user_id,
             },
         }
 
         const followResp = await this.sendToNode(request);
-        // No/invalid response (transient error or error payload): don't end
-        // the cursor so the session can retry later.
-        if (!followResp || !Array.isArray(followResp.users)) {
-            return []
+        if (!followResp || !followResp.networks || typeof followResp.networks !== 'object') {
+            return {}
         }
-        if (followResp.users.length === 0) {
-            this.setCursor('whotofollow', endCursor)
-            return []
+
+        const pages = {}
+        for (const [network, page] of Object.entries(followResp.networks)) {
+            const cursor = page?.cursor || endCursor
+            pages[network] = {
+                users: (page?.users || []).filter(user => !user.isOffline),
+                cursor: cursor === endCursor ? null : cursor,
+            }
         }
-        this.setCursor('whotofollow', followResp.cursor || endCursor)
-
-        followResp.users = followResp.users.filter(user => !user.isOffline);
-
-        return followResp.users;
+        return pages
     },
 
     async uploadImage(imgFile) {
