@@ -41,20 +41,26 @@ resulting from the use or misuse of this software.
 
         <Loader :loading="loading" />
 
-        <!-- Same three networks the sidebar block tabs between, laid out as
-             sections because this page has the room for all of them at once. -->
-        <div v-for="section in sections" :key="section.key">
-          <div v-if="section.profiles.length > 0">
-            <h2 class="px-5 pt-3 text-left text-lg font-bold flex items-center gap-2">
-              <NetworkIcon :network="section.network" size-class="w-5 h-5" />
-              <span>{{ section.label }}</span>
-            </h2>
-            <Users :users="section.profiles" :loading="loading" />
-          </div>
+        <div class="flex gap-1 px-5 py-2 border-b border-lighter" role="tablist">
+          <button
+            v-for="tab in tabs"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            :aria-selected="tab.key === activeTab"
+            :aria-label="tab.label"
+            @click="activeTab = tab.key"
+            :class="['flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-full text-sm transition-colors flat-btn',
+                     tab.key === activeTab
+                       ? 'bg-lighter text-blue font-bold ring-1 ring-[color:var(--gd-trim)]'
+                       : 'text-dark hover:bg-lighter']"
+          >
+            <NetworkIcon :network="tab.network" size-class="w-5 h-5 shrink-0" />
+            <span class="hidden sm:inline truncate">{{ tab.label }}</span>
+          </button>
         </div>
-        <div v-if="!loading && profiles.length === 0" class="flex justify-center py-6">
-          <span>No results</span>
-        </div>
+
+        <Users :users="activeProfiles" :loading="loading" />
 
         <button
           v-if="hasMore && !loading"
@@ -97,19 +103,20 @@ export default {
     return {
       loading: true,
       loadingMore: false,
+      activeTab: 'warpnet',
       profiles: [],
       cursors: {},
     };
   },
   computed: {
-    hasMore() {
-      return Object.keys(this.cursors).length > 0;
+    tabs() {
+      return networkSections(this.profiles);
     },
-    sections() {
-      return networkSections(this.profiles).map((s) => ({
-        ...s,
-        profiles: this.profiles.filter((p) => sectionKey(p) === s.key),
-      }));
+    activeProfiles() {
+      return this.profiles.filter((p) => sectionKey(p) === this.activeTab);
+    },
+    hasMore() {
+      return Boolean(this.cursors[this.activeTab]);
     },
   },
   methods: {
@@ -121,7 +128,7 @@ export default {
       const entries = Object.entries(pages);
       // Friends of friends first; the order within each part is the node's.
       const sorted = await Promise.all(entries.map(([, page]) => warpnetService.circleFirst(page.users)));
-      const cursors = {};
+      const cursors = {...this.cursors};
       entries.forEach(([network, page], i) => {
         for (const p of sorted[i]) {
           if (!this.profiles.some((x) => x.id === p.id)) {
@@ -130,6 +137,8 @@ export default {
         }
         if (page.cursor) {
           cursors[network] = page.cursor;
+        } else {
+          delete cursors[network];
         }
       });
       this.cursors = cursors;
@@ -138,9 +147,10 @@ export default {
       if (!this.hasMore || this.loadingMore) {
         return;
       }
+      const network = this.activeTab;
       this.loadingMore = true;
       try {
-        await this.addPages(await warpnetService.getWhoToFollow(this.cursors));
+        await this.addPages(await warpnetService.getWhoToFollow({[network]: this.cursors[network]}));
       } catch (err) {
         console.error("loading component:", this.$options.name, err);
       } finally {
