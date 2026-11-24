@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"github.com/Warp-net/warpnet/core/bridge"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -79,6 +80,15 @@ func TestUserRepoErrorPaths(t *testing.T) {
 				return err
 			},
 			ops: []faultOp{op("Get"), opN("Get", 2), op("Set"), op("Commit")},
+		},
+		{
+			name: "UpdateMovingTheRow",
+			seed: seedUser,
+			run: func(s *faultStore) error {
+				_, err := NewUserRepo(s).Update(userId, domain.User{Network: bridge.ThreadsNetwork})
+				return err
+			},
+			ops: []faultOp{op("Get"), opN("Get", 2), op("Delete"), op("Set"), opN("Set", 2), opN("Set", 3), op("Commit")},
 		},
 		{
 			name: "Delete",
