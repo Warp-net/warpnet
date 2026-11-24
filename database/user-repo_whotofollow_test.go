@@ -446,10 +446,10 @@ func TestUserRowsLiveUnderTheirNetwork(t *testing.T) {
 	}
 
 	for id, root := range map[string]string{
-		"a@mastodon.social":      "/USERS/USER/mastodon/",
-		"b@threads.net":          "/USERS/USER/threads/",
-		"npub1x@nostr.com":       "/USERS/USER/nostr/",
-		native:                   "/USERS/USER/" + warpnet.WarpnetName + "/",
+		"a@mastodon.social":      "/USERS/USER/mastodon//",
+		"b@threads.net":          "/USERS/USER/threads//",
+		"npub1x@nostr.com":       "/USERS/USER/nostr//",
+		native:                   "/USERS/USER/warpnet//",
 		"untagged@nonet.example": "/USERS/USER/None/",
 	} {
 		require.True(t, strings.HasPrefix(storedKeyOf(t, repo, id), root), id)
@@ -461,7 +461,7 @@ func TestUserRowsLiveUnderTheirNetwork(t *testing.T) {
 	t.Run("an update keeps the row where it is", func(t *testing.T) {
 		_, err := repo.Update("a@mastodon.social", domain.User{Bio: "hi", IsOffline: false})
 		require.NoError(t, err)
-		require.True(t, strings.HasPrefix(storedKeyOf(t, repo, "a@mastodon.social"), "/USERS/USER/mastodon/"))
+		require.True(t, strings.HasPrefix(storedKeyOf(t, repo, "a@mastodon.social"), "/USERS/USER/mastodon//"))
 		got, err := repo.Get("a@mastodon.social")
 		require.NoError(t, err)
 		require.Equal(t, "hi", got.Bio)
@@ -544,7 +544,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		txn, err := repo.db.NewTxn()
 		require.NoError(t, err)
 		for id, data := range rows {
-			require.NoError(t, txn.Set(userRowKeyIn("mastodon", id), data))
+			require.NoError(t, txn.Set(userRowKeyIn(mastodonNamespace, id), data))
 		}
 		require.NoError(t, txn.Commit())
 		putUsers(t, repo, domain.User{Id: "old@mastodon.social", Network: "mastodon"})
@@ -560,7 +560,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		require.Equal(t, local_store.EndCursor, end)
 	})
 
-	t.Run("a root named like the start of another is not mixed in", func(t *testing.T) {
+	t.Run("a network without a root of its own lands in None and stays apart", func(t *testing.T) {
 		repo := newWhoToFollowRepo(t)
 		for _, u := range []domain.User{
 			{Id: "a@nostr.com", NodeId: "gateway", Network: "nostr"},
@@ -569,8 +569,14 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 			_, err := repo.Create(u)
 			require.NoError(t, err)
 		}
+		require.True(t, strings.HasPrefix(storedKeyOf(t, repo, "b@nostrx.example"), "/USERS/USER/None/"))
+
 		users, _, err := repo.WhoToFollow("nostr", nil, nil)
 		require.NoError(t, err)
 		require.Equal(t, []string{"a@nostr.com"}, idsOfUsers(users))
+
+		users, _, err = repo.WhoToFollow("nostrx", nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, []string{"b@nostrx.example"}, idsOfUsers(users))
 	})
 }

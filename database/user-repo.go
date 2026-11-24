@@ -44,6 +44,13 @@ import (
 	"github.com/Warp-net/warpnet/json"
 )
 
+var networkNamespaces = map[string]string{
+	warpnet.WarpnetName:    warpnetNamespace,
+	bridge.MastodonNetwork: mastodonNamespace,
+	bridge.ThreadsNetwork:  threadsNamespace,
+	bridge.NostrNetwork:    nostrNamespace,
+}
+
 var (
 	ErrUserNotFound      = local_store.DBError("user not found")
 	ErrUserAlreadyExists = local_store.DBError("user already exists")
@@ -55,6 +62,12 @@ const (
 	UsersRepoName    = "/USERS"
 	userSubNamespace = "USER"
 	nodeSubNamespace = "NODE"
+
+	noneNamespace     = "None"
+	warpnetNamespace  = warpnet.WarpnetName + "/"
+	mastodonNamespace = bridge.MastodonNetwork + "/"
+	threadsNamespace  = bridge.ThreadsNetwork + "/"
+	nostrNamespace    = bridge.NostrNetwork + "/"
 
 	defaultAverageRTT int64 = 125000
 
@@ -109,9 +122,9 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		return user, err
 	}
 
-	root := "None"
-	if user.Network != "" {
-		root = resolveNetwork(user)
+	root := noneNamespace
+	if ns, ok := networkNamespaces[resolveNetwork(user)]; ok && user.Network != "" {
+		root = ns
 	}
 	if user.RoundTripTime == 0 {
 		user.RoundTripTime = defaultAverageRTT
@@ -124,7 +137,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(user.Id).
 		Build()
@@ -199,7 +212,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -330,7 +343,7 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 	}
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -395,7 +408,7 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 func (repo *UserRepo) Delete(userId string) error {
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -593,10 +606,10 @@ func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string)
 	}
 
 	namespace := local_store.NewPrefixBuilder(UsersRepoName).AddSubPrefix(userSubNamespace)
-	none := namespace.AddRootID("None").Build()
+	none := namespace.AddRootID(noneNamespace).Build()
 	prefixes := []local_store.DatabaseKey{none}
-	if network != "" && !strings.HasPrefix(from, none.String()) {
-		prefixes = []local_store.DatabaseKey{namespace.AddRootID(network).Build(), none}
+	if ns, ok := networkNamespaces[network]; ok && !strings.HasPrefix(from, none.String()) {
+		prefixes = []local_store.DatabaseKey{namespace.AddRootID(ns).Build(), none}
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -672,7 +685,7 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	for _, userID := range userIDs {
 		fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(userSubNamespace).
-			AddRootID("None").
+			AddRootID(noneNamespace).
 			AddRange(local_store.FixedRangeKey).
 			AddParentId(userID).
 			Build()

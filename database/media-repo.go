@@ -304,7 +304,7 @@ func (repo *MediaRepo) ListCopies(userId, originalKey string) ([]domain.MediaCop
 	prefix := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(CopySubNamespace).
 		AddParentId(userId).
-		Build()
+		Build() + local_store.Delimeter
 	err = txn.IterateKeys(prefix, func(key string) error {
 		keys = append(keys, local_store.DatabaseKey(key))
 		return nil
@@ -366,7 +366,7 @@ func (repo *MediaRepo) ListImageHashes() ([]domain.TweetImageHashes, error) {
 	var keys []local_store.DatabaseKey
 	prefix := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(HashSubNamespace).
-		Build()
+		Build() + local_store.Delimeter
 	err = txn.IterateKeys(prefix, func(key string) error {
 		keys = append(keys, local_store.DatabaseKey(key))
 		return nil
