@@ -189,6 +189,50 @@ describe('WhoToFollow.vue (sidebar)', () => {
   });
 
   describe('when the node misbehaves', () => {
+    it('keeps the block and its tabs when the node fails', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      warpnetService.getWhoToFollow.mockRejectedValueOnce(new Error('node down'));
+
+      renderComponent();
+
+      expect(await screen.findByRole('tab', { name: 'Warpnet' })).toBeInTheDocument();
+      await waitFor(() => expect(errSpy).toHaveBeenCalled());
+      expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(1);
+      errSpy.mockRestore();
+    });
+
+    it('keeps the rows of earlier rounds when a later round fails', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      warpnetService.getWhoToFollow
+        .mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1)] }, { warpnet: 'w-next' }))
+        .mockRejectedValueOnce(new Error('node down'));
+      warpnetService.isFollowing.mockResolvedValue(true);
+
+      renderComponent();
+
+      expect(await screen.findByText('warp1')).toBeInTheDocument();
+      await waitFor(() => expect(warpnetService.isFollowing).toHaveBeenCalledWith(wid(1)));
+      expect(await screen.findByText('Following')).toBeInTheDocument();
+      errSpy.mockRestore();
+    });
+
+    it('keeps the follow state of the others when one cannot be read', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      warpnetService.getWhoToFollow.mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1), warpnetUser(2)] }));
+      warpnetService.isFollowing.mockImplementation(async (id) => {
+        if (id === wid(1)) throw new Error('status unknown');
+        return true;
+      });
+
+      renderComponent();
+
+      expect(await screen.findByText('warp1')).toBeInTheDocument();
+      await waitFor(() => expect(warpnetService.isFollowing).toHaveBeenCalledWith(wid(2)));
+      expect(await screen.findAllByText('Following')).toHaveLength(1);
+      expect(screen.getAllByText('Follow')).toHaveLength(1);
+      warnSpy.mockRestore();
+    });
+
     it('never asks again for a network that ran out', async () => {
       warpnetService.getWhoToFollow
         .mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1)], mastodon: [mastodonUser(1)] }, { mastodon: 'm-next' }))

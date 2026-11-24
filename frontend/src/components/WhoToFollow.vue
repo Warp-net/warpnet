@@ -201,29 +201,36 @@ export default {
     // Every network comes with its own page and cursor; a network whose tab
     // is still short after filtering gets its next page (bounded).
     let cursors = {};
-    for (let round = 0; round < 5; round++) {
-      const pages = await warpnetService.getWhoToFollow(cursors, sectionLimit * 2);
-      cursors = {};
-      for (const [network, page] of Object.entries(pages)) {
-        for (const p of page.users) {
-          const group = this.groupFor(p);
-          if (group.length < sectionLimit && !group.some((x) => x.id === p.id)) {
-            group.push(p);
+    try {
+      for (let round = 0; round < 5; round++) {
+        const pages = await warpnetService.getWhoToFollow(cursors, sectionLimit * 2);
+        cursors = {};
+        for (const [network, page] of Object.entries(pages)) {
+          for (const p of page.users) {
+            const group = this.groupFor(p);
+            if (group.length < sectionLimit && !group.some((x) => x.id === p.id)) {
+              group.push(p);
+            }
+          }
+          if (network && page.cursor && this.groupOf(network).length < sectionLimit) {
+            cursors[network] = page.cursor;
           }
         }
-        if (network && page.cursor && this.groupOf(network).length < sectionLimit) {
-          cursors[network] = page.cursor;
+        if (Object.keys(cursors).length === 0) {
+          break;
         }
       }
-      if (Object.keys(cursors).length === 0) {
-        break;
-      }
+    } catch (err) {
+      console.error("loading component:", this.$options.name, err);
     }
     const profiles = Object.values(this.groups).flat();
     this.loadAvatars(profiles);
     for (const p of profiles) {
-      const status = await warpnetService.isFollowing(p.id);
-      this.followingStatus.set(p.id, status);
+      try {
+        this.followingStatus.set(p.id, await warpnetService.isFollowing(p.id));
+      } catch (err) {
+        console.warn(`failed to load follow state for [${p.id}]:`, err);
+      }
     }
   },
 };
