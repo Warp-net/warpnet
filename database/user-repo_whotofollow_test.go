@@ -524,7 +524,7 @@ func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
 		users, next, err := repo.WhoToFollow("mastodon", &limit, nil)
 		require.NoError(t, err)
 		require.Len(t, users, 2)
-		require.Equal(t, "/USERS/USER/None", next)
+		require.Equal(t, userRowKey("old00000@mastodon.example").String(), next)
 
 		rest, end, err := repo.WhoToFollow("mastodon", &limit, &next)
 		require.NoError(t, err)

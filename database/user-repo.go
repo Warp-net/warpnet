@@ -122,7 +122,11 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		return user, err
 	}
 
-	root := resolveRoot(user)
+	network := resolveNetwork(user)
+	root, ok := networkNamespaces[network]
+	if !ok || user.Network == "" {
+		root = noneNamespace
+	}
 	if user.RoundTripTime == 0 {
 		user.RoundTripTime = defaultAverageRTT
 	}
@@ -237,7 +241,11 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if err != nil {
 		return existingUser, err
 	}
-	rootBefore := resolveRoot(existingUser)
+	oldNetwork := resolveNetwork(existingUser)
+	oldRoot, ok := networkNamespaces[oldNetwork]
+	if !ok || existingUser.Network == "" {
+		oldRoot = noneNamespace
+	}
 	// A user id is not bound to a key, so any node can claim one: the node a
 	// user was first bound to keeps it.
 	if newUser.NodeId != "" && existingUser.NodeId != "" && newUser.NodeId != existingUser.NodeId {
@@ -315,8 +323,12 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if err != nil {
 		return existingUser, err
 	}
-	root := resolveRoot(existingUser)
-	isMoved := root != rootBefore
+	network := resolveNetwork(existingUser)
+	root, ok := networkNamespaces[network]
+	if !ok || existingUser.Network == "" {
+		root = noneNamespace
+	}
+	isMoved := root != oldRoot
 	if isMoved {
 		rtt := existingUser.RoundTripTime
 		if rtt == 0 {
@@ -607,32 +619,27 @@ func resolveNetwork(u domain.User) string {
 	return ""
 }
 
-func resolveRoot(u domain.User) string {
-	if ns, ok := networkNamespaces[resolveNetwork(u)]; ok && u.Network != "" {
-		return ns
-	}
-	return noneNamespace
-}
-
 func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
 		want = min(*limit, local_store.MaxPageLimit)
 	}
-
 	from := ""
 	if cursor != nil {
 		from = *cursor
 	}
-	if from == local_store.EndCursor {
-		return []domain.User{}, local_store.EndCursor, nil
-	}
 
-	namespace := local_store.NewPrefixBuilder(UsersRepoName).AddSubPrefix(userSubNamespace)
-	none := namespace.AddRootID(noneNamespace).Build()
-	prefixes := []local_store.DatabaseKey{none}
-	if ns, ok := networkNamespaces[network]; ok && !strings.HasPrefix(from, none.String()) {
-		prefixes = []local_store.DatabaseKey{namespace.AddRootID(ns).Build(), none}
+	users := local_store.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace)
+	none := users.AddRootID(noneNamespace).Build()
+	roots := []local_store.DatabaseKey{none}
+	own, ok := networkNamespaces[network]
+	switch {
+	case from == local_store.EndCursor:
+		roots = nil
+	case ok && !strings.HasPrefix(from, none.String()):
+		ownRoot := users.AddRootID(own).Build()
+		roots = []local_store.DatabaseKey{ownRoot, none}
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -644,46 +651,32 @@ func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string)
 	found := make([]domain.User, 0, want)
 	page := recommendedScanPage
 	scanned := 0
-	for i, prefix := range prefixes {
+	for i, root := range roots {
 		if i > 0 {
-			from = ""
+			from = root.String()
 		}
 		for {
 			if scanned >= maxRecommendedScan {
-				if from == "" {
-					return found, prefix.String(), nil
-				}
 				return found, from, nil
 			}
-			c := from
-			items, next, err := txn.List(prefix, &page, &c)
+			items, next, err := txn.List(root, &page, &from)
 			if err != nil {
 				return nil, "", err
 			}
-			for j, item := range items {
+			for _, item := range items {
+				if uint64(len(found)) == want {
+					return found, item.Key, nil
+				}
 				scanned++
 				var u domain.User
 				if err := json.Unmarshal(item.Value, &u); err != nil {
 					return nil, "", err
 				}
-				if u.IsOffline || resolveNetwork(u) != network {
-					continue
+				if !u.IsOffline && resolveNetwork(u) == network {
+					found = append(found, u)
 				}
-				found = append(found, u)
-				if uint64(len(found)) < want {
-					continue
-				}
-				switch {
-				case j+1 < len(items):
-					return found, items[j+1].Key, nil
-				case next != "" && next != local_store.EndCursor:
-					return found, next, nil
-				case i+1 < len(prefixes):
-					return found, prefixes[i+1].String(), nil
-				}
-				return found, local_store.EndCursor, nil
 			}
-			if len(items) == 0 || next == "" || next == local_store.EndCursor {
+			if next == local_store.EndCursor {
 				break
 			}
 			from = next

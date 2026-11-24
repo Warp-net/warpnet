@@ -485,7 +485,7 @@ func TestWhoToFollowAcrossRoots(t *testing.T) {
 		users, next, err := repo.WhoToFollow(bridge.MastodonNetwork, &limit, nil)
 		require.NoError(t, err, "the page fills before the None root")
 		require.Len(t, users, 2)
-		require.Equal(t, noneMarker, next)
+		require.Equal(t, userRowKey("zz-broken").String(), next)
 		_, _, err = repo.WhoToFollow(bridge.MastodonNetwork, &limit, &next)
 		require.Error(t, err)
 
@@ -595,13 +595,13 @@ func TestWhoToFollowCursorsAcrossRoots(t *testing.T) {
 		require.Equal(t, local_store.EndCursor, cur)
 	})
 
-	t.Run("a full page at the end of the own root hands over once, then ends", func(t *testing.T) {
+	t.Run("a full page at the end of the own root points into None, then ends", func(t *testing.T) {
 		repo := seed(t)
 		limit := uint64(1)
 		users, next, err := repo.WhoToFollow(bridge.NostrNetwork, &limit, nil)
 		require.NoError(t, err)
 		require.Equal(t, []string{"npub1z@nostr.com"}, idsOfUsers(users))
-		require.Equal(t, noneMarker, next)
+		require.Equal(t, userRowKey("old00000@mastodon.example").String(), next)
 
 		rest, end, err := repo.WhoToFollow(bridge.NostrNetwork, &limit, &next)
 		require.NoError(t, err)
