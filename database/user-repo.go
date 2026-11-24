@@ -122,10 +122,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		return user, err
 	}
 
-	root := noneNamespace
-	if ns, ok := networkNamespaces[resolveNetwork(user)]; ok && user.Network != "" {
-		root = ns
-	}
+	root := resolveRoot(user)
 	if user.RoundTripTime == 0 {
 		user.RoundTripTime = defaultAverageRTT
 	}
@@ -240,6 +237,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if err != nil {
 		return existingUser, err
 	}
+	rootBefore := resolveRoot(existingUser)
 	// A user id is not bound to a key, so any node can claim one: the node a
 	// user was first bound to keeps it.
 	if newUser.NodeId != "" && existingUser.NodeId != "" && newUser.NodeId != existingUser.NodeId {
@@ -317,6 +315,24 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if err != nil {
 		return existingUser, err
 	}
+	root := resolveRoot(existingUser)
+	isMoved := root != rootBefore
+	if isMoved {
+		rtt := existingUser.RoundTripTime
+		if rtt == 0 {
+			rtt = defaultAverageRTT
+		}
+		movedKey := local_store.NewPrefixBuilder(UsersRepoName).
+			AddSubPrefix(userSubNamespace).
+			AddRootID(root).
+			AddRange(local_store.RangePrefix(strconv.FormatInt(rtt, 10))).
+			AddParentId(userId).
+			Build()
+		if err = txn.Delete(local_store.DatabaseKey(sortableKeyBytes)); err != nil {
+			return existingUser, err
+		}
+		sortableKeyBytes = movedKey.Bytes()
+	}
 	if err = txn.Set(fixedKey, sortableKeyBytes); err != nil {
 		return existingUser, err
 	}
@@ -324,10 +340,10 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		return existingUser, err
 	}
 
-	if newUser.NodeId != "" {
+	if existingUser.NodeId != "" && (newUser.NodeId != "" || isMoved) {
 		nodeUserKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
-			AddRootID(newUser.NodeId).
+			AddRootID(existingUser.NodeId).
 			Build()
 		if err = txn.Set(nodeUserKey, sortableKeyBytes); err != nil {
 			return existingUser, err
@@ -589,6 +605,13 @@ func resolveNetwork(u domain.User) string {
 		return warpnet.WarpnetName
 	}
 	return ""
+}
+
+func resolveRoot(u domain.User) string {
+	if ns, ok := networkNamespaces[resolveNetwork(u)]; ok && u.Network != "" {
+		return ns
+	}
+	return noneNamespace
 }
 
 func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string) ([]domain.User, string, error) {
