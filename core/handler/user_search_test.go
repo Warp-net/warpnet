@@ -26,7 +26,7 @@ func (s stubSearchUserFetcher) Search(q string, l *uint64, c *string) ([]domain.
 	}
 	return nil, "end", nil
 }
-func (s stubSearchUserFetcher) WhoToFollow(_ *uint64, _ *string) ([]domain.User, string, error) {
+func (s stubSearchUserFetcher) WhoToFollow(_ string, _ *uint64, _ *string) ([]domain.User, string, error) {
 	return nil, "end", nil
 }
 func (s stubSearchUserFetcher) Update(_ string, u domain.User) (domain.User, error) { return u, nil }

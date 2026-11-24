@@ -41,7 +41,7 @@ func TestWhoToFollow_RecommendsAUserAnotherNodeSeesOnline(t *testing.T) {
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: "me"}), nil)
 		require.NoError(t, err)
 		var ids []string
-		for _, u := range resp.(event.UsersResponse).Users {
+		for _, u := range resp.(event.WhoToFollowResponse).Users {
 			ids = append(ids, u.Id)
 		}
 		return ids

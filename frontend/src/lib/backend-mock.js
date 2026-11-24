@@ -273,7 +273,13 @@ function generateResponse(arg) {
                     allUsers.push(value);
                 }
             }
-            return {users: allUsers.slice(0, 3)};
+            const networks = {};
+            for (const u of allUsers.slice(0, 3)) {
+                const network = u.network || 'warpnet';
+                networks[network] = networks[network] || {users: [], cursor: 'end'};
+                networks[network].users.push(u);
+            }
+            return {networks};
 
         case PUBLIC_POST_FOLLOW:
             const followKey = "follow:"+arg.body.followerId+":"+arg.body.followingId;

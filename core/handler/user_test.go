@@ -19,7 +19,7 @@ type stubUserFetcher struct {
 	getFn           func(userId string) (domain.User, error)
 	listFn          func(limit *uint64, cursor *string) ([]domain.User, string, error)
 	searchFn        func(query string, limit *uint64, cursor *string) ([]domain.User, string, error)
-	whoToFollowFn   func(limit *uint64, cursor *string) ([]domain.User, string, error)
+	whoToFollowFn   func(network string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	updateFn        func(userId string, newUser domain.User) (domain.User, error)
 	createWithTTLFn func(user domain.User, ttl time.Duration) (domain.User, error)
 }
@@ -48,9 +48,9 @@ func (s stubUserFetcher) Search(query string, limit *uint64, cursor *string) ([]
 	}
 	return nil, "", nil
 }
-func (s stubUserFetcher) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
+func (s stubUserFetcher) WhoToFollow(network string, limit *uint64, cursor *string) ([]domain.User, string, error) {
 	if s.whoToFollowFn != nil {
-		return s.whoToFollowFn(limit, cursor)
+		return s.whoToFollowFn(network, limit, cursor)
 	}
 	return nil, "", nil
 }

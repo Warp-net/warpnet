@@ -198,32 +198,41 @@ export default {
    },
   async created() {
     console.log("loading component:", this.$options.name);
-    // Who-to-follow is always scoped to the signed-in owner. The backend
-    // returns both networks mixed, so keep paging (bounded) until each
-    // section has its fill or the feed ends.
-    let cursorReset = true;
-    for (let round = 0; round < 5; round++) {
-      // Friends of friends first; the order within each part is the node's.
-      const batch = await warpnetService.circleFirst(await warpnetService.getWhoToFollow(cursorReset, sectionLimit * 2));
-      cursorReset = false;
-      if (!batch || batch.length === 0) {
-        break;
-      }
-      for (const p of batch) {
-        const group = this.groupFor(p);
-        if (group.length < sectionLimit) {
-          group.push(p);
+    // Every network comes with its own page and cursor; a network whose tab
+    // is still short after filtering gets its next page (bounded).
+    let cursors = {};
+    try {
+      for (let round = 0; round < 5; round++) {
+        const entries = Object.entries(await warpnetService.getWhoToFollow(cursors, sectionLimit * 2));
+        // Friends of friends first; the order within each part is the node's.
+        const sorted = await Promise.all(entries.map(([, page]) => warpnetService.circleFirst(page.users)));
+        cursors = {};
+        for (const [i, [network, page]] of entries.entries()) {
+          for (const p of sorted[i]) {
+            const group = this.groupFor(p);
+            if (group.length < sectionLimit && !group.some((x) => x.id === p.id)) {
+              group.push(p);
+            }
+          }
+          if (network && page.cursor && this.groupOf(network).length < sectionLimit) {
+            cursors[network] = page.cursor;
+          }
+        }
+        if (Object.keys(cursors).length === 0) {
+          break;
         }
       }
-      if (Object.values(this.groups).every((g) => g.length >= sectionLimit)) {
-        break;
-      }
+    } catch (err) {
+      console.error("loading component:", this.$options.name, err);
     }
     const profiles = Object.values(this.groups).flat();
     this.loadAvatars(profiles);
     for (const p of profiles) {
-      const status = await warpnetService.isFollowing(p.id);
-      this.followingStatus.set(p.id, status);
+      try {
+        this.followingStatus.set(p.id, await warpnetService.isFollowing(p.id));
+      } catch (err) {
+        console.warn(`failed to load follow state for [${p.id}]:`, err);
+      }
     }
   },
 };

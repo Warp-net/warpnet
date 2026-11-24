@@ -98,10 +98,13 @@ export default {
       loading: true,
       loadingMore: false,
       profiles: [],
-      hasMore: true,
+      cursors: {},
     };
   },
   computed: {
+    hasMore() {
+      return Object.keys(this.cursors).length > 0;
+    },
     sections() {
       return networkSections(this.profiles).map((s) => ({
         ...s,
@@ -113,18 +116,31 @@ export default {
     goHome() {
       this.$router.push("/");
     },
+    // Each network keeps its own cursor; one that ran out drops out.
+    async addPages(pages) {
+      const entries = Object.entries(pages);
+      // Friends of friends first; the order within each part is the node's.
+      const sorted = await Promise.all(entries.map(([, page]) => warpnetService.circleFirst(page.users)));
+      const cursors = {};
+      entries.forEach(([network, page], i) => {
+        for (const p of sorted[i]) {
+          if (!this.profiles.some((x) => x.id === p.id)) {
+            this.profiles.push(p);
+          }
+        }
+        if (page.cursor) {
+          cursors[network] = page.cursor;
+        }
+      });
+      this.cursors = cursors;
+    },
     async loadMore() {
       if (!this.hasMore || this.loadingMore) {
         return;
       }
       this.loadingMore = true;
       try {
-        const users = await warpnetService.circleFirst(await warpnetService.getWhoToFollow(false));
-        if (!users || users.length === 0) {
-          this.hasMore = false;
-          return;
-        }
-        this.profiles.push(...users);
+        await this.addPages(await warpnetService.getWhoToFollow(this.cursors));
       } catch (err) {
         console.error("loading component:", this.$options.name, err);
       } finally {
@@ -135,12 +151,7 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     try {
-      // Friends of friends first; the order within each part is the node's.
-      const users = await warpnetService.circleFirst(await warpnetService.getWhoToFollow(true));
-      this.profiles = users || [];
-      if (this.profiles.length === 0) {
-        this.hasMore = false;
-      }
+      await this.addPages(await warpnetService.getWhoToFollow());
     } catch (err) {
       console.error("loading component:", this.$options.name, err);
     } finally {

@@ -332,19 +332,24 @@ func (s *UserRepoTestSuite) TestWhoToFollow_SurfacesBuriedNativePeer() {
 	s.Require().NoError(err)
 
 	limit := uint64(20)
-	recs, _, err := s.repo.WhoToFollow(&limit, nil)
+	recs, _, err := s.repo.WhoToFollow(warpnet.WarpnetName, &limit, nil)
 	s.Require().NoError(err)
 
 	got := map[string]bool{}
-	nonNativeNoAvatar := false
 	for _, u := range recs {
 		got[u.Id] = true
+	}
+	s.True(got[nativeID], "WhoToFollow must surface a native peer past the first page with no tweets")
+	s.True(got[barePeerID], "WhoToFollow must surface a native peer with no avatar and no tweets")
+
+	untagged, _, err := s.repo.WhoToFollow("", &limit, nil)
+	s.Require().NoError(err)
+	nonNativeNoAvatar := false
+	for _, u := range untagged {
 		if strings.HasPrefix(u.Id, "0000-wtf-noise-") {
 			nonNativeNoAvatar = true
 		}
 	}
-	s.True(got[nativeID], "WhoToFollow must surface a native peer past the first page with no tweets")
-	s.True(got[barePeerID], "WhoToFollow must surface a native peer with no avatar and no tweets")
 	s.True(nonNativeNoAvatar, "WhoToFollow must not gate non-native users on missing avatar/tweets")
 }
 
@@ -412,12 +417,8 @@ func networkCounts(users []domain.User) map[string]int {
 	return out
 }
 
-// Filled in keyspace order, the many Mastodon accounts took every slot and the
-// single Threads one never appeared.
-func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
+func TestWhoToFollowFindsTheOnlyAccountOfANetwork(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
-
-	// Ids sorting ahead of the Threads handle, as the real ones do.
 	for i := range 12 {
 		_, cerr := repo.Create(domain.User{
 			Id:       fmt.Sprintf("aaa%02d@mastodon.social", i),
@@ -433,21 +434,14 @@ func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
 	require.NoError(t, err)
 
 	limit := uint64(10)
-	users, _, err := repo.WhoToFollow(&limit, nil)
+	users, cur, err := repo.WhoToFollow("threads", &limit, nil)
 	require.NoError(t, err)
-
-	byNetwork := map[string]int{}
-	for _, u := range users {
-		byNetwork[u.Network]++
-	}
-	require.NotZero(t, byNetwork["threads"], "the only Threads account must not be crowded out: %+v", byNetwork)
-	require.NotZero(t, byNetwork["mastodon"], "Mastodon must still be represented: %+v", byNetwork)
-	require.LessOrEqual(t, len(users), int(limit))
+	require.Len(t, users, 1)
+	require.Equal(t, "engineer_of_your_ass@threads.net", users[0].Id)
+	require.Equal(t, local_store.EndCursor, cur)
 }
 
-// The property is "every network present gets a share", not a list of names, so
-// a network added later needs no change here.
-func TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks(t *testing.T) {
+func TestWhoToFollowListsAnyNumberOfNetworks(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	seeded := []struct {
 		network, prefix, host string
@@ -463,79 +457,64 @@ func TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks(t *testing.T) {
 	}
 
 	limit := uint64(10)
-	users, _, err := repo.WhoToFollow(&limit, nil)
-	require.NoError(t, err)
-	require.Len(t, users, int(limit))
-
-	counts := networkCounts(users)
 	for _, sd := range seeded {
-		require.NotZerof(t, counts[sd.network], "%s got no slot: %+v", sd.network, counts)
+		users, _, err := repo.WhoToFollow(sd.network, &limit, nil)
+		require.NoError(t, err)
+		require.Len(t, users, min(sd.n, int(limit)), sd.network)
+		require.Equal(t, map[string]int{sd.network: len(users)}, networkCounts(users))
 	}
-	// Round-robin bounds the largest share at one per round, so the network with
-	// twenty accounts cannot take more than a quarter-ish of ten.
-	require.LessOrEqualf(t, counts["mastodon"], 3, "one network took the block: %+v", counts)
-	// The network with a single account gets exactly that one.
-	require.Equal(t, 1, counts["threads"], counts)
 }
 
-// Fewer slots than networks: they go to distinct networks.
-func TestWhoToFollowWithFewerSlotsThanNetworks(t *testing.T) {
+func TestWhoToFollowPagesOneNetwork(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 5)
 	seedNetwork(t, repo, "threads", "bbb", "threads.net", 5)
-	seedNetwork(t, repo, "bluesky", "ccc", "bsky.example", 5)
 
 	limit := uint64(2)
-	users, _, err := repo.WhoToFollow(&limit, nil)
-	require.NoError(t, err)
-	require.Len(t, users, 2)
-	require.Len(t, networkCounts(users), 2, "both slots went to one network: %+v", users)
+	seen := map[string]struct{}{}
+	cursor := ""
+	for range 5 {
+		users, next, err := repo.WhoToFollow("mastodon", &limit, &cursor)
+		require.NoError(t, err)
+		for _, u := range users {
+			require.Equal(t, "mastodon", u.Network)
+			require.NotContains(t, seen, u.Id)
+			seen[u.Id] = struct{}{}
+		}
+		cursor = next
+		if next == local_store.EndCursor {
+			break
+		}
+	}
+	require.Len(t, seen, 5)
+	require.Equal(t, local_store.EndCursor, cursor)
 }
 
-// Rows stored before the network tag existed get their own group.
 func TestWhoToFollowKeepsUntaggedRowsInTheirOwnBucket(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 9)
 	seedNetwork(t, repo, "", "bbb", "legacy.example", 2)
 
 	limit := uint64(4)
-	users, _, err := repo.WhoToFollow(&limit, nil)
+	users, _, err := repo.WhoToFollow("", &limit, nil)
 	require.NoError(t, err)
-	counts := networkCounts(users)
-	require.NotZerof(t, counts[""], "untagged rows lost their share: %+v", counts)
-	require.NotZerof(t, counts["mastodon"], "%+v", counts)
+	require.Equal(t, map[string]int{"": 2}, networkCounts(users))
 }
 
-// One network alone must still fill the whole block.
-func TestWhoToFollowGivesOneNetworkTheWholeBlock(t *testing.T) {
+func TestWhoToFollowFoldsNativeTagsIntoWarpnet(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
-	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 12)
-
-	limit := uint64(10)
-	users, _, err := repo.WhoToFollow(&limit, nil)
-	require.NoError(t, err)
-	require.Len(t, users, 10)
-	require.Equal(t, 10, networkCounts(users)["mastodon"])
-}
-
-// Warpnet is a network like any other: its peers must not take every slot.
-func TestWhoToFollowGivesWarpnetNoPriority(t *testing.T) {
-	repo := newWhoToFollowRepo(t)
-	for range 12 {
+	for _, tag := range []string{"", "warpnet", "testnet", "mainnet"} {
 		_, err := repo.Create(domain.User{
-			Id: ulid.Make().String(), Username: "peer", NodeId: "node-" + uuid.NewString(),
+			Id: ulid.Make().String(), Username: "peer", NodeId: "node-" + uuid.NewString(), Network: tag,
 		})
 		require.NoError(t, err)
 	}
 	seedNetwork(t, repo, "threads", "zzz", "threads.net", 1)
 
 	limit := uint64(10)
-	users, _, err := repo.WhoToFollow(&limit, nil)
+	users, _, err := repo.WhoToFollow(warpnet.WarpnetName, &limit, nil)
 	require.NoError(t, err)
-
-	counts := networkCounts(users)
-	require.NotZerof(t, counts["threads"], "warpnet took the whole block: %+v", counts)
-	require.NotZerof(t, counts[warpnet.WarpnetName], "warpnet peers must still be recommended: %+v", counts)
+	require.Len(t, users, 4)
 }
 
 func TestUserRepoTestSuite(t *testing.T) {

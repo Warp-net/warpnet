@@ -206,6 +206,12 @@ type GetAllUsersEvent struct {
 	UserId domain.ID `json:"user_id"`
 }
 
+type GetWhoToFollowEvent struct {
+	GetAllUsersEvent
+
+	Cursors map[string]string `json:"cursors,omitempty"`
+}
+
 // GetChatEvent defines model for GetChatEvent.
 type GetChatEvent struct {
 	ChatId domain.ID `json:"chat_id"`
@@ -506,6 +512,14 @@ type UnretweetEvent struct {
 type UsersResponse struct {
 	Cursor string        `json:"cursor"`
 	Users  []domain.User `json:"users"`
+}
+
+// WhoToFollowResponse keeps the Warpnet page in UsersResponse for clients that
+// predate Networks.
+type WhoToFollowResponse struct {
+	UsersResponse
+
+	Networks map[string]UsersResponse `json:"networks"`
 }
 
 // UserStatusResponse defines model for UserStatusResponse.

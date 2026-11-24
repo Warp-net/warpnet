@@ -23,6 +23,11 @@ const mid = (n) => `user${n}@mastodon.social`;
 const warpnetUser = (n) => ({ id: wid(n), username: `warp${n}` });
 const mastodonUser = (n) => ({ id: mid(n), username: `masto${n}` });
 const threadsUser = (n) => ({ id: `user${n}@threads.net`, username: `thr${n}`, network: 'threads' });
+// The node's answer as the service hands it over: {network: {users, cursor}}.
+const pages = (byNetwork, cursors = {}) =>
+  Object.fromEntries(
+    Object.entries(byNetwork).map(([network, users]) => [network, { users, cursor: cursors[network] ?? null }])
+  );
 
 // The tabs carry their label as the button title; the icon inside carries the
 // aria-label, so the title is what addresses the tab itself.
@@ -47,16 +52,21 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  warpnetService.getWhoToFollow.mockResolvedValue([]);
+  warpnetService.getWhoToFollow.mockResolvedValue({});
+  warpnetService.circleFirst.mockImplementation((users) => Promise.resolve(users || []));
   warpnetService.isFollowing.mockResolvedValue(false);
   warpnetService.getImage.mockResolvedValue('');
 });
 
 describe('WhoToFollow.vue (sidebar)', () => {
   it('puts each network behind its own tab in one block', async () => {
-    warpnetService.getWhoToFollow
-      .mockResolvedValueOnce([warpnetUser(1), mastodonUser(1), threadsUser(1), warpnetUser(2)])
-      .mockResolvedValueOnce([]);
+    warpnetService.getWhoToFollow.mockResolvedValueOnce(
+      pages({
+        warpnet: [warpnetUser(1), warpnetUser(2)],
+        mastodon: [mastodonUser(1)],
+        threads: [threadsUser(1)],
+      })
+    );
 
     renderComponent();
 
@@ -77,17 +87,14 @@ describe('WhoToFollow.vue (sidebar)', () => {
     await openTab('Threads');
     expect(await screen.findByText('thr1')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(2, false, 10);
-    });
-    expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(1, true, 10);
+    // Every network ran out, so one request was enough.
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(1);
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledWith({}, 10);
   });
 
   it('gives a network the client does not know its own tab', async () => {
     const other = { id: 'bob@bsky.social', username: 'other1', network: 'bluesky' };
-    warpnetService.getWhoToFollow
-      .mockResolvedValueOnce([warpnetUser(1), other])
-      .mockResolvedValueOnce([]);
+    warpnetService.getWhoToFollow.mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1)], bluesky: [other] }));
 
     renderComponent();
 
@@ -98,11 +105,15 @@ describe('WhoToFollow.vue (sidebar)', () => {
     expect(screen.queryByText('warp1')).not.toBeInTheDocument();
   });
 
-  it('keeps paging until each tab is filled, capping each at 5', async () => {
+  it('pages only the short tabs by their own cursor, capping each at 5', async () => {
     warpnetService.getWhoToFollow
-      .mockResolvedValueOnce([1, 2, 3, 4, 5, 6].map(warpnetUser))
-      .mockResolvedValueOnce([1, 2, 3, 4, 5].map(mastodonUser))
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(
+        pages(
+          { warpnet: [1, 2, 3, 4, 5, 6].map(warpnetUser), mastodon: [1, 2].map(mastodonUser) },
+          { warpnet: 'w-next', mastodon: 'm-next' }
+        )
+      )
+      .mockResolvedValueOnce(pages({ mastodon: [3, 4, 5, 6].map(mastodonUser) }, { mastodon: 'm-more' }));
 
     renderComponent();
 
@@ -110,12 +121,13 @@ describe('WhoToFollow.vue (sidebar)', () => {
     expect(screen.queryByText('warp6')).not.toBeInTheDocument(); // capped
     await openTab('Mastodon');
     expect(await screen.findByText('masto5')).toBeInTheDocument();
+    expect(screen.queryByText('masto6')).not.toBeInTheDocument();
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(2);
+    expect(warpnetService.getWhoToFollow).toHaveBeenLastCalledWith({ mastodon: 'm-next' }, 10);
   });
 
   it('keeps every tab even when a network has nobody to suggest', async () => {
-    warpnetService.getWhoToFollow
-      .mockResolvedValueOnce([warpnetUser(1)])
-      .mockResolvedValueOnce([]);
+    warpnetService.getWhoToFollow.mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1)] }));
 
     renderComponent();
 
@@ -129,9 +141,7 @@ describe('WhoToFollow.vue (sidebar)', () => {
   });
 
   it('renders the rows without waiting for hanging avatar blobs', async () => {
-    warpnetService.getWhoToFollow
-      .mockResolvedValueOnce([warpnetUser(1), warpnetUser(2)])
-      .mockResolvedValueOnce([]);
+    warpnetService.getWhoToFollow.mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1), warpnetUser(2)] }));
     warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
 
     renderComponent();
@@ -143,12 +153,14 @@ describe('WhoToFollow.vue (sidebar)', () => {
   });
 
   it('fills each avatar independently of a failing sibling', async () => {
-    warpnetService.getWhoToFollow
-      .mockResolvedValueOnce([
-        { ...warpnetUser(1), avatar_key: 'k1' },
-        { ...warpnetUser(2), avatar_key: 'k2' },
-      ])
-      .mockResolvedValueOnce([]);
+    warpnetService.getWhoToFollow.mockResolvedValueOnce(
+      pages({
+        warpnet: [
+          { ...warpnetUser(1), avatar_key: 'k1' },
+          { ...warpnetUser(2), avatar_key: 'k2' },
+        ],
+      })
+    );
     warpnetService.getImage.mockImplementation(({ key }) =>
       key === 'k1'
         ? Promise.resolve('data:image/png;base64,one')
@@ -168,9 +180,9 @@ describe('WhoToFollow.vue (sidebar)', () => {
 
   it('stops paging after a bounded number of rounds', async () => {
     let n = 0;
-    // Endless warpnet-only feed: mastodon never fills.
+    // Mastodon keeps a cursor but never fills.
     warpnetService.getWhoToFollow.mockImplementation(async () =>
-      [1, 2].map(() => warpnetUser(++n))
+      pages({ warpnet: [warpnetUser(++n)], mastodon: [] }, { mastodon: 'more' })
     );
 
     renderComponent();
@@ -178,6 +190,137 @@ describe('WhoToFollow.vue (sidebar)', () => {
     expect(await screen.findByText('warp1')).toBeInTheDocument();
     await waitFor(() => {
       expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(5);
+    });
+  });
+
+  it('puts the circle first within each network, never across them', async () => {
+    warpnetService.circleFirst.mockImplementation((users) => Promise.resolve([...(users || [])].reverse()));
+    warpnetService.getWhoToFollow.mockResolvedValueOnce(
+      pages({ warpnet: [warpnetUser(1), warpnetUser(2)], mastodon: [mastodonUser(1)] })
+    );
+
+    renderComponent();
+
+    expect(await screen.findByText('warp2')).toBeInTheDocument();
+    const names = screen.getAllByText(/^warp\d$/).map((el) => el.textContent);
+    expect(names).toEqual(['warp2', 'warp1']);
+    expect(warpnetService.circleFirst.mock.calls.map(([users]) => users.map((u) => u.id))).toEqual([
+      [wid(1), wid(2)],
+      [mid(1)],
+    ]);
+  });
+
+  describe('when the node misbehaves', () => {
+    it('keeps the block and its tabs when the node fails', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      warpnetService.getWhoToFollow.mockRejectedValueOnce(new Error('node down'));
+
+      renderComponent();
+
+      expect(await screen.findByRole('tab', { name: 'Warpnet' })).toBeInTheDocument();
+      await waitFor(() => expect(errSpy).toHaveBeenCalled());
+      expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(1);
+      errSpy.mockRestore();
+    });
+
+    it('keeps the rows of earlier rounds when a later round fails', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      warpnetService.getWhoToFollow
+        .mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1)] }, { warpnet: 'w-next' }))
+        .mockRejectedValueOnce(new Error('node down'));
+      warpnetService.isFollowing.mockResolvedValue(true);
+
+      renderComponent();
+
+      expect(await screen.findByText('warp1')).toBeInTheDocument();
+      await waitFor(() => expect(warpnetService.isFollowing).toHaveBeenCalledWith(wid(1)));
+      expect(await screen.findByText('Following')).toBeInTheDocument();
+      errSpy.mockRestore();
+    });
+
+    it('keeps the follow state of the others when one cannot be read', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      warpnetService.getWhoToFollow.mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1), warpnetUser(2)] }));
+      warpnetService.isFollowing.mockImplementation(async (id) => {
+        if (id === wid(1)) throw new Error('status unknown');
+        return true;
+      });
+
+      renderComponent();
+
+      expect(await screen.findByText('warp1')).toBeInTheDocument();
+      await waitFor(() => expect(warpnetService.isFollowing).toHaveBeenCalledWith(wid(2)));
+      expect(await screen.findAllByText('Following')).toHaveLength(1);
+      expect(screen.getAllByText('Follow')).toHaveLength(1);
+      warnSpy.mockRestore();
+    });
+
+    it('never asks again for a network that ran out', async () => {
+      warpnetService.getWhoToFollow
+        .mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1)], mastodon: [mastodonUser(1)] }, { mastodon: 'm-next' }))
+        .mockResolvedValueOnce(pages({ mastodon: [mastodonUser(2)] }));
+
+      renderComponent();
+
+      await waitFor(() => expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(2));
+      expect(warpnetService.getWhoToFollow.mock.calls[1][0]).toEqual({ mastodon: 'm-next' });
+    });
+
+    it('never asks again for a tab that is already full', async () => {
+      warpnetService.getWhoToFollow.mockResolvedValueOnce(
+        pages({ warpnet: [1, 2, 3, 4, 5].map(warpnetUser) }, { warpnet: 'w-next' })
+      );
+
+      renderComponent();
+
+      expect(await screen.findByText('warp5')).toBeInTheDocument();
+      expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(1);
+    });
+
+    it('never pages the untagged bucket, whatever cursor it carries', async () => {
+      warpnetService.getWhoToFollow.mockResolvedValueOnce(
+        pages({ '': [{ id: 'old@legacy.example', username: 'legacy1' }] }, { '': 'u-next' })
+      );
+
+      renderComponent();
+
+      await openTab('Mastodon');
+      expect(await screen.findByText('legacy1')).toBeInTheDocument();
+      expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an account once when the node sends it twice', async () => {
+      warpnetService.getWhoToFollow
+        .mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1), warpnetUser(1)] }, { warpnet: 'w-next' }))
+        .mockResolvedValueOnce(pages({ warpnet: [warpnetUser(1), warpnetUser(2)] }));
+
+      renderComponent();
+
+      expect(await screen.findByText('warp2')).toBeInTheDocument();
+      expect(screen.getAllByText('warp1')).toHaveLength(1);
+    });
+
+    it('stays bounded when a network key does not match its tab', async () => {
+      // the tab key is lower-cased, so the "Mastodon" bucket never fills
+      warpnetService.getWhoToFollow.mockImplementation(async () =>
+        pages({ Mastodon: [mastodonUser(1)] }, { Mastodon: 'more' })
+      );
+
+      renderComponent();
+
+      await openTab('Mastodon');
+      expect(await screen.findByText('masto1')).toBeInTheDocument();
+      await waitFor(() => expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(5));
+      expect(screen.getAllByText('masto1')).toHaveLength(1);
+    });
+
+    it('asks the follow state only of the rows it shows', async () => {
+      warpnetService.getWhoToFollow.mockResolvedValueOnce(pages({ warpnet: [1, 2, 3, 4, 5, 6, 7].map(warpnetUser) }));
+
+      renderComponent();
+
+      await waitFor(() => expect(warpnetService.isFollowing).toHaveBeenCalledTimes(5));
+      expect(warpnetService.isFollowing).not.toHaveBeenCalledWith(wid(6));
     });
   });
 });
