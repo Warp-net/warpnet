@@ -124,9 +124,10 @@ func (e ResponseError) Error() string {
 
 // FollowingsResponse defines model for FollowingsResponse.
 type FollowingsResponse struct {
-	Cursor     string      `json:"cursor"`
-	Followings []domain.ID `json:"followings"`
-	FollowerId domain.ID   `json:"follower_id"`
+	Cursor       string      `json:"cursor"`
+	Followings   []domain.ID `json:"followings"`
+	FollowerId   domain.ID   `json:"follower_id"`
+	IsMutualOnly bool        `json:"is_mutual_only,omitempty"`
 }
 
 // ImportTwitterArchiveResponse defines model for ImportTwitterArchiveResponse.
@@ -224,6 +225,8 @@ type GetFollowersEvent struct {
 	Cursor *string   `json:"cursor,omitempty"`
 	Limit  *uint64   `json:"limit,omitempty"`
 	UserId domain.ID `json:"user_id"`
+	// IsMutualOnly asks a node for its owner's followings that follow back.
+	IsMutualOnly bool `json:"is_mutual_only,omitempty"`
 }
 
 type GetIsFollowingEvent struct {
@@ -288,6 +291,16 @@ type GetRatingEvent struct {
 
 // GetRatingResponse defines model for GetRatingResponse.
 type GetRatingResponse = domain.NodeRating
+
+// GetTrustEvent defines model for GetTrustEvent.
+type GetTrustEvent struct {
+	UserIds []domain.ID `json:"user_ids"`
+}
+
+// GetTrustResponse defines model for GetTrustResponse.
+type GetTrustResponse struct {
+	Users map[domain.ID]domain.Trust `json:"users"`
+}
 
 // RefuseReservationEvent defines model for RefuseReservationEvent.
 type RefuseReservationEvent struct {

@@ -71,6 +71,7 @@ const KNOWN_SECTIONS = [
     {key: 'warpnet', label: 'Warpnet', network: ''},
     {key: NETWORK_MASTODON, label: 'Mastodon', network: NETWORK_MASTODON},
     {key: NETWORK_THREADS, label: 'Threads', network: NETWORK_THREADS},
+    {key: NETWORK_NOSTR, label: 'Nostr', network: NETWORK_NOSTR},
 ];
 
 // sectionKey is the section a profile belongs in.
@@ -123,8 +124,17 @@ export function bridgedInstance(userId) {
 const FEDI_HANDLE_RE = /^@?([\w.-]+)@([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i;
 const FEDI_PROFILE_RE = /^https?:\/\/(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)\/@([\w.-]+)\/?$/i;
 
+// The gateway names a Nostr account npub1…@nostr.com, so a bare npub (or a
+// NIP-21 nostr:npub link) is looked up as that handle.
+const NOSTR_HANDLE_HOST = 'nostr.com';
+const BARE_NPUB_RE = /^(?:nostr:)?(npub1[02-9ac-hj-np-z]{58})$/i;
+
 export function fediverseHandle(query) {
     const q = (query || '').trim();
+    const npub = q.match(BARE_NPUB_RE);
+    if (npub) {
+        return `${npub[1].toLowerCase()}@${NOSTR_HANDLE_HOST}`;
+    }
     const handle = q.match(FEDI_HANDLE_RE);
     if (handle) {
         return `${handle[1]}@${handle[2].toLowerCase()}`;

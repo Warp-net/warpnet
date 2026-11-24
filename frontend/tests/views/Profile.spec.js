@@ -17,6 +17,7 @@ vi.mock('@/service/service', () => ({
     isFollower: vi.fn(),
     isUserBlocked: vi.fn(),
     isUserMuted: vi.fn(),
+    isTrusted: vi.fn(),
   },
 }));
 
@@ -92,6 +93,7 @@ beforeEach(() => {
   warpnetService.isFollower.mockResolvedValue(false);
   warpnetService.isUserBlocked.mockResolvedValue(false);
   warpnetService.isUserMuted.mockResolvedValue(false);
+  warpnetService.isTrusted.mockResolvedValue(false);
   warpnetService.getReplies.mockResolvedValue([]);
   warpnetService.getReactions.mockResolvedValue({ items: [] });
   warpnetService.getTweets.mockImplementation(({ cursorReset }) =>
@@ -305,5 +307,40 @@ describe('Profile.vue loading states', () => {
     expect(await screen.findByText('hello from bob')).toBeInTheDocument();
     expect(screen.getByText('42')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryAllByRole('status', { name: 'Loading' })).toHaveLength(0));
+  });
+});
+
+describe('Profile.vue circle medal', () => {
+  const bob = { id: 'bob', user_id: 'bob', username: 'Bob', created_at: '2025-12-01T10:00:00Z' };
+
+  it('puts the medal right of the handle of someone in the circle', async () => {
+    warpnetService.getProfile.mockResolvedValue(bob);
+    warpnetService.isTrusted.mockResolvedValue(true);
+    renderProfile('bob');
+
+    const medal = await screen.findByRole('img', { name: 'In your circle' });
+    expect(medal.parentElement.textContent).toMatch(/^\s*@bob/);
+    expect(warpnetService.isTrusted).toHaveBeenCalledWith('bob');
+  });
+
+  it('shows no medal for a stranger or an unanswered lookup', async () => {
+    for (const answer of [false, null]) {
+      warpnetService.getProfile.mockResolvedValue(bob);
+      warpnetService.isTrusted.mockResolvedValue(answer);
+      const { unmount } = renderProfile('bob');
+      await screen.findAllByText('Bob');
+      await waitFor(() => expect(warpnetService.isTrusted).toHaveBeenCalled());
+      await Promise.resolve();
+      expect(screen.queryByRole('img', { name: 'In your circle' })).toBeNull();
+      unmount();
+      warpnetService.isTrusted.mockClear();
+    }
+  });
+
+  it('does not ask about the owner\'s own profile', async () => {
+    renderProfile('alice');
+    // The background image is asked for right after the circle would be.
+    await waitFor(() => expect(warpnetService.getImage).toHaveBeenCalled());
+    expect(warpnetService.isTrusted).not.toHaveBeenCalled();
   });
 });

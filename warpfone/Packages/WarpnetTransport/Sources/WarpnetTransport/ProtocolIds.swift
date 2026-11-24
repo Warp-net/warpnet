@@ -44,6 +44,7 @@ public enum ProtocolIds {
   public static let PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"
   public static let PRIVATE_GET_MESSAGES = "/private/get/messages/0.0.0"
   public static let PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
+  public static let PRIVATE_GET_TRUST = "/private/get/trust/0.0.0"
   public static let PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
   public static let PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
   public static let PRIVATE_GET_UPDATE = "/private/get/update/0.0.0"

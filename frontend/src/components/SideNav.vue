@@ -297,6 +297,13 @@ resulting from the use or misuse of this software.
           Sign in by QR-code
         </button>
         <button
+          v-if="screenLock.isEnabled"
+          @click="lockNow"
+          class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm"
+        >
+          Lock screen <span class="text-dark">(Ctrl+L)</span>
+        </button>
+        <button
           @click="signOut"
           :disabled="signingOut"
           class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm text-red-600"
@@ -313,6 +320,7 @@ resulting from the use or misuse of this software.
 import QRCodeModal from "@/components/QRCodeModal.vue";
 import {warpnetService} from "@/service/service";
 import {startOnboarding} from "@/lib/onboarding";
+import {lockScreen, screenLock} from "@/lib/screen-lock";
 
 const walletPollEvery = 60000;
 const walletAssets = ["USDT", "TRX"];
@@ -326,6 +334,7 @@ export default {
     return {
       dropdown: false,
       signingOut: false,
+      screenLock,
       profile: {},
       newMessages: 0,
       newNotifications: 0,
@@ -478,6 +487,10 @@ export default {
         this.qrPayload = warpnetService.getQRPayload();
         this.qrModalOpen = true;
     },
+    lockNow() {
+      this.dropdown = false;
+      lockScreen();
+    },
     async closeQR() {
       this.qrModalOpen = false
     },
@@ -533,12 +546,24 @@ export default {
       this.profile.avatar = null;
     }
 
-    this.unsubscribeNotifications = warpnetService.subscribeNotifications((resp) => {
-      const items = (resp && resp.notifications) || [];
-      const unreadMessages = items.filter((n) => n && n.type === 'message' && !n.is_read).length;
+    // Unread items from unfamiliar people wait in their own tab and do not
+    // light the badges. Only the first page is known here, so older unread
+    // ones still count.
+    let badgeSeq = 0;
+    this.unsubscribeNotifications = warpnetService.subscribeNotifications(async (resp) => {
+      const seq = ++badgeSeq;
+      const unread = ((resp && resp.notifications) || []).filter((n) => n && !n.is_read);
+      const isUnfamiliar = await Promise.all(unread.map((n) =>
+        n.actor_id && n.type !== 'moderation' && n.type !== 'order_limit'
+          ? warpnetService.isUnfamiliar(n.actor_id)
+          : false));
+      if (seq !== badgeSeq) return;
+      const messages = unread.filter((n) => n.type === 'message').length;
+      const familiarMessages = unread.filter((n, i) => n.type === 'message' && !isUnfamiliar[i]).length;
+      const unfamiliarOthers = unread.filter((n, i) => n.type !== 'message' && isUnfamiliar[i]).length;
       const onMessages = this.$route && (this.$route.name === 'Chats' || this.$route.name === 'Messages');
-      this.newMessages = onMessages ? 0 : unreadMessages;
-      this.newNotifications = Math.max(0, (resp.unread_count || 0) - unreadMessages);
+      this.newMessages = onMessages ? 0 : familiarMessages;
+      this.newNotifications = Math.max(0, (resp.unread_count || 0) - messages - unfamiliarOthers);
     });
 
     await warpnetService.getNotifications(true)

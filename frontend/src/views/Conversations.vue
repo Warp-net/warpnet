@@ -41,6 +41,19 @@ resulting from the use or misuse of this software.
         <!-- chats -->
         <Loader :loading="loading" />
         <div v-if="!loading">
+          <button
+            v-if="requestChats.length > 0 || isShowingRequests"
+            type="button"
+            class="flat-btn w-full text-left px-4 py-3 border-b border-lighter hover:bg-lightest flex items-center"
+            @click="showRequests = !isShowingRequests"
+          >
+            <i class="fas mr-3 text-blue" :class="isShowingRequests ? 'fa-arrow-left' : 'fa-inbox'" aria-hidden="true"></i>
+            <span class="font-semibold">{{ isShowingRequests ? 'Back to chats' : 'Message requests' }}</span>
+            <span v-if="!isShowingRequests" class="ml-auto text-sm text-dark">{{ requestChats.length }}</span>
+          </button>
+          <p v-if="isShowingRequests" class="px-4 py-2 text-xs text-dark border-b border-lighter">
+            From people outside your circle. Replying moves a chat to your chats.
+          </p>
           <div v-if="visibleChats.length === 0" class="flex flex-col items-center justify-center w-full pt-10">
             <div class="w-3/4 flex flex-col items-center justify-center text-center">
               <p class="font-bold text-lg">No messages yet</p>
@@ -109,9 +122,11 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {isBridgedUser} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
+import chatRequests from "@/lib/chat-requests.mixin";
 
 export default {
   name: "Chats",
+  mixins: [chatRequests],
   components: {
     NewMessageOverlay: defineAsyncComponent(() => import('../components/NewMessageOverlay.vue')),
     Loader: defineAsyncComponent(() => import('../components/Loader.vue')),
@@ -136,7 +151,7 @@ export default {
     // accounts never land in the map, so their legacy chats stay hidden.
     // Unread chats float to the top; within each group the freshest
     // message comes first.
-    visibleChats() {
+    listedChats() {
       return this.chats
         .filter((chat) => this.usersMap.has(chat.other_user_id))
         .map((chat) => ({ ...chat, unread: this.isUnread(chat) }))
@@ -174,6 +189,7 @@ export default {
         return;
       }
       this.showNewMessageModal = false;
+      this.acceptChatWith(user.id);
 
       // Check if chat already exists
       const existingChat = this.chats.find(
@@ -254,6 +270,7 @@ export default {
         if (uid && !this.usersMap.has(uid) && !isBridgedUser({id: uid})) {
           this.usersMap.set(uid, {id: uid});
         }
+        this.checkFamiliarity(uid);
       }
       return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
     },

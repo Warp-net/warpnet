@@ -3,6 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
+    isUnfamiliar: vi.fn(() => Promise.resolve(false)),
+    acceptChat: vi.fn(),
+    circleFirst: vi.fn((users) => Promise.resolve(users || [])),
     getWhoToFollow: vi.fn(),
     isFollowing: vi.fn(),
     getImage: vi.fn(),
@@ -50,6 +53,7 @@ afterAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   warpnetService.getWhoToFollow.mockResolvedValue({});
+  warpnetService.circleFirst.mockImplementation((users) => Promise.resolve(users || []));
   warpnetService.isFollowing.mockResolvedValue(false);
   warpnetService.getImage.mockResolvedValue('');
 });
@@ -131,6 +135,7 @@ describe('WhoToFollow.vue (sidebar)', () => {
     // A tab that appeared only once it had content would hide the fact that the
     // other networks exist at all, so it stays and says it is empty.
     expect(screen.getByRole('tab', { name: 'Threads' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Nostr' })).toBeInTheDocument();
     await openTab('Threads');
     expect(await screen.findByText('Nobody to suggest here yet.')).toBeInTheDocument();
   });
@@ -186,6 +191,23 @@ describe('WhoToFollow.vue (sidebar)', () => {
     await waitFor(() => {
       expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(5);
     });
+  });
+
+  it('puts the circle first within each network, never across them', async () => {
+    warpnetService.circleFirst.mockImplementation((users) => Promise.resolve([...(users || [])].reverse()));
+    warpnetService.getWhoToFollow.mockResolvedValueOnce(
+      pages({ warpnet: [warpnetUser(1), warpnetUser(2)], mastodon: [mastodonUser(1)] })
+    );
+
+    renderComponent();
+
+    expect(await screen.findByText('warp2')).toBeInTheDocument();
+    const names = screen.getAllByText(/^warp\d$/).map((el) => el.textContent);
+    expect(names).toEqual(['warp2', 'warp1']);
+    expect(warpnetService.circleFirst.mock.calls.map(([users]) => users.map((u) => u.id))).toEqual([
+      [wid(1), wid(2)],
+      [mid(1)],
+    ]);
   });
 
   describe('when the node misbehaves', () => {

@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
+    isUnfamiliar: vi.fn(() => Promise.resolve(false)),
+    acceptChat: vi.fn(),
+    circleFirst: vi.fn((users) => Promise.resolve(users || [])),
     getChats: vi.fn(),
     getProfile: vi.fn(),
     getImage: vi.fn(),
@@ -78,9 +81,36 @@ beforeEach(() => {
   warpnetService.createChat.mockResolvedValue({ id: 'new-chat-id' });
   warpnetService.markMessageNotificationsRead.mockResolvedValue(undefined);
   warpnetService.getCursor.mockReturnValue('');
+  warpnetService.isUnfamiliar.mockImplementation(() => Promise.resolve(false));
 });
 
 describe('Conversations.vue', () => {
+  it('keeps chats from unfamiliar people under message requests', async () => {
+    warpnetService.isUnfamiliar.mockImplementation((id) => Promise.resolve(id === DAVE));
+    warpnetService.getChats.mockResolvedValue([
+      { id: 'chat-bob', owner_id: ALICE, other_user_id: BOB, last_message: 'hi from bob' },
+      { id: 'chat-dave', owner_id: ALICE, other_user_id: DAVE, last_message: 'buy my coin' },
+    ]);
+    renderConversations();
+
+    expect(await screen.findByText('hi from bob')).toBeInTheDocument();
+    const requests = await screen.findByRole('button', { name: /Message requests/ });
+    expect(requests).toHaveTextContent('1');
+    expect(screen.queryByText('buy my coin')).not.toBeInTheDocument();
+
+    await fireEvent.click(requests);
+    expect(await screen.findByText('buy my coin')).toBeInTheDocument();
+    expect(screen.queryByText('hi from bob')).not.toBeInTheDocument();
+    expect(screen.getByText(/Replying moves a chat to your chats/)).toBeInTheDocument();
+  });
+
+  it('accepts a chat the owner starts', async () => {
+    renderConversations();
+    await fireEvent.click(await screen.findByRole('button', { name: 'New message' }));
+    await fireEvent.click(await screen.findByText('pick-user'));
+    await waitFor(() => expect(warpnetService.acceptChat).toHaveBeenCalledWith(CAROL));
+  });
+
   it('renders the Chats title', async () => {
     renderConversations();
     expect(await screen.findByText('Chats')).toBeInTheDocument();

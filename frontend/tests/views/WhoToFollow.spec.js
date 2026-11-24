@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
+    isUnfamiliar: vi.fn(() => Promise.resolve(false)),
+    acceptChat: vi.fn(),
+    circleFirst: vi.fn((users) => Promise.resolve(users || [])),
     getWhoToFollow: vi.fn(),
   },
 }));
@@ -45,6 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   routerPush.mockClear();
   warpnetService.getWhoToFollow.mockResolvedValue({});
+  warpnetService.circleFirst.mockImplementation((users) => Promise.resolve(users || []));
 });
 
 // Valid ULID → warpnet; fediverse handle → mastodon.
@@ -141,6 +145,24 @@ describe('WhoToFollow.vue', () => {
     await waitFor(() => {
       expect(routerPush).toHaveBeenCalledWith('/');
     });
+  });
+
+  it('puts the circle first within each network', async () => {
+    warpnetService.circleFirst.mockImplementation((users) => Promise.resolve([...(users || [])].reverse()));
+    warpnetService.getWhoToFollow.mockResolvedValueOnce({
+      warpnet: page([
+        { id: WARPNET_ID, username: 'alice' },
+        { id: '01ARZ3NDEKTSV4RRFFQ69G5FAW', username: 'carol' },
+      ]),
+      mastodon: page([{ id: MASTODON_ID, username: 'bob' }]),
+    });
+
+    renderView();
+
+    expect(await screen.findByText('carol')).toBeInTheDocument();
+    const names = screen.getAllByRole('listitem').map((el) => el.textContent);
+    expect(names.indexOf('carol')).toBeLessThan(names.indexOf('alice'));
+    expect(warpnetService.circleFirst).toHaveBeenCalledTimes(2);
   });
 
   describe('when the node misbehaves', () => {

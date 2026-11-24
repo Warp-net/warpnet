@@ -47,6 +47,7 @@ import (
 var (
 	ErrUserNotFound      = local_store.DBError("user not found")
 	ErrUserAlreadyExists = local_store.DBError("user already exists")
+	ErrUserOfAnotherNode = local_store.DBError("user is bound to another node")
 	ErrConflict          = local_store.ErrConflict
 )
 
@@ -221,6 +222,11 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	err = json.Unmarshal(data, &existingUser)
 	if err != nil {
 		return existingUser, err
+	}
+	// A user id is not bound to a key, so any node can claim one: the node a
+	// user was first bound to keeps it.
+	if newUser.NodeId != "" && existingUser.NodeId != "" && newUser.NodeId != existingUser.NodeId {
+		return existingUser, ErrUserOfAnotherNode
 	}
 
 	if newUser.Birthdate != "" {

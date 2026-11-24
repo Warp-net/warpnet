@@ -117,10 +117,13 @@ export default {
       this.$router.push("/");
     },
     // Each network keeps its own cursor; one that ran out drops out.
-    addPages(pages) {
+    async addPages(pages) {
+      const entries = Object.entries(pages);
+      // Friends of friends first; the order within each part is the node's.
+      const sorted = await Promise.all(entries.map(([, page]) => warpnetService.circleFirst(page.users)));
       const cursors = {};
-      for (const [network, page] of Object.entries(pages)) {
-        for (const p of page.users) {
+      entries.forEach(([network, page], i) => {
+        for (const p of sorted[i]) {
           if (!this.profiles.some((x) => x.id === p.id)) {
             this.profiles.push(p);
           }
@@ -128,7 +131,7 @@ export default {
         if (page.cursor) {
           cursors[network] = page.cursor;
         }
-      }
+      });
       this.cursors = cursors;
     },
     async loadMore() {
@@ -137,7 +140,7 @@ export default {
       }
       this.loadingMore = true;
       try {
-        this.addPages(await warpnetService.getWhoToFollow(this.cursors));
+        await this.addPages(await warpnetService.getWhoToFollow(this.cursors));
       } catch (err) {
         console.error("loading component:", this.$options.name, err);
       } finally {
@@ -148,7 +151,7 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     try {
-      this.addPages(await warpnetService.getWhoToFollow());
+      await this.addPages(await warpnetService.getWhoToFollow());
     } catch (err) {
       console.error("loading component:", this.$options.name, err);
     } finally {

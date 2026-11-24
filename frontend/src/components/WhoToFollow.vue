@@ -203,10 +203,12 @@ export default {
     let cursors = {};
     try {
       for (let round = 0; round < 5; round++) {
-        const pages = await warpnetService.getWhoToFollow(cursors, sectionLimit * 2);
+        const entries = Object.entries(await warpnetService.getWhoToFollow(cursors, sectionLimit * 2));
+        // Friends of friends first; the order within each part is the node's.
+        const sorted = await Promise.all(entries.map(([, page]) => warpnetService.circleFirst(page.users)));
         cursors = {};
-        for (const [network, page] of Object.entries(pages)) {
-          for (const p of page.users) {
+        for (const [i, [network, page]] of entries.entries()) {
+          for (const p of sorted[i]) {
             const group = this.groupFor(p);
             if (group.length < sectionLimit && !group.some((x) => x.id === p.id)) {
               group.push(p);

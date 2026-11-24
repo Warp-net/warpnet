@@ -83,6 +83,13 @@ describe('fediverseHandle', () => {
     expect(fediverseHandle('https://www.threads.com/@mosseri/')).toBe('mosseri@threads.com');
   });
 
+  it('reads a bare npub as its Nostr handle', () => {
+    const npub = 'npub1' + 'q'.repeat(58);
+    expect(fediverseHandle(npub)).toBe(`${npub}@nostr.com`);
+    expect(fediverseHandle(`nostr:${npub.toUpperCase()}`)).toBe(`${npub}@nostr.com`);
+    expect(fediverseHandle('npub1short')).toBe('');
+  });
+
   it('returns empty for anything else', () => {
     expect(fediverseHandle('bob')).toBe('');
     expect(fediverseHandle('bob@localhost')).toBe('');

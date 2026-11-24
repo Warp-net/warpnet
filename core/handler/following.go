@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/Warp-net/warpnet/core/authorship"
@@ -428,6 +429,36 @@ func StreamGetFollowingsHandler(
 
 		owner := authRepo.GetOwner()
 		isOwnFollowingsRequest := ev.UserId == owner.UserId
+		if isOwnFollowingsRequest && ev.IsMutualOnly { // own followings that follow back
+			limit := uint64(1000)
+			if ev.Limit != nil && *ev.Limit > 0 {
+				limit = min(*ev.Limit, limit)
+			}
+			var cursor string
+			if ev.Cursor != nil {
+				cursor = *ev.Cursor
+			}
+			mutuals := make([]string, 0, limit)
+			for uint64(len(mutuals)) < limit {
+				page, next, err := followRepo.GetFollowings(ev.UserId, &limit, &cursor)
+				if err != nil {
+					return nil, err
+				}
+				mutuals = append(mutuals, slices.DeleteFunc(page, func(id string) bool {
+					return !followRepo.IsFollower(ev.UserId, id)
+				})...)
+				cursor = next
+				if uint64(len(page)) < limit {
+					break
+				}
+			}
+			return event.FollowingsResponse{
+				Cursor:       cursor,
+				FollowerId:   ev.UserId,
+				Followings:   mutuals,
+				IsMutualOnly: true,
+			}, nil
+		}
 		if isOwnFollowingsRequest { // get own followings
 			followings, cursor, err := followRepo.GetFollowings(ev.UserId, ev.Limit, ev.Cursor)
 			if err != nil {

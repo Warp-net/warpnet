@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/bridge"
@@ -920,6 +921,41 @@ func TestStreamGetFollowingsHandler(t *testing.T) {
 		r := resp.(event.FollowingsResponse)
 		if len(r.Followings) != 1 {
 			t.Fatalf("expected 1 following, got %d", len(r.Followings))
+		}
+	})
+
+	t.Run("own mutual followings", func(t *testing.T) {
+		followings := []string{"a", "b", "c", "d", "e"}
+		repo := stubFollowRepo{
+			getFollowingsFn: func(_ string, limit *uint64, cursor *string) ([]string, string, error) {
+				start := 0
+				if *cursor != "" {
+					start = int((*cursor)[0] - '0')
+				}
+				end := min(start+int(*limit), len(followings))
+				return followings[start:end], string(rune('0' + end)), nil
+			},
+			isFollowerFn: func(_, id string) bool { return id == "b" || id == "d" || id == "e" },
+		}
+		h := StreamGetFollowingsHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, repo, stubFollowStreamer{})
+
+		limit := uint64(2)
+		resp, err := h(marshal(t, event.GetFollowingsEvent{UserId: owner, Limit: &limit, IsMutualOnly: true}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.FollowingsResponse)
+		if !r.IsMutualOnly || strings.Join(r.Followings, ",") != "b,d" || r.Cursor != "4" {
+			t.Fatalf("first page: %+v", r)
+		}
+
+		resp, err = h(marshal(t, event.GetFollowingsEvent{UserId: owner, Limit: &limit, Cursor: &r.Cursor, IsMutualOnly: true}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r = resp.(event.FollowingsResponse)
+		if strings.Join(r.Followings, ",") != "e" {
+			t.Fatalf("last page: %+v", r)
 		}
 	})
 

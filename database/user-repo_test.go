@@ -699,15 +699,29 @@ func (s *UserRepoTestSuite) TestUpdateKeepsLastSeenUntilANewOneArrives() {
 	s.True(seen.Equal(*got.LastSeen))
 }
 
-func (s *UserRepoTestSuite) TestUpdateRebindsNodeIndex() {
-	original := s.createUser(domain.User{Username: "grace", NodeId: "node-old"})
+func (s *UserRepoTestSuite) TestUpdateBindsUnboundUserToNode() {
+	original := s.createUser(domain.User{Username: "grace"})
 
-	_, err := s.repo.Update(original.Id, domain.User{NodeId: "node-new"})
+	_, err := s.repo.Update(original.Id, domain.User{NodeId: "node-1"})
 	s.Require().NoError(err)
 
-	got, err := s.repo.GetByNodeID("node-new")
+	got, err := s.repo.GetByNodeID("node-1")
 	s.Require().NoError(err)
 	s.Equal(original.Id, got.Id)
+}
+
+func (s *UserRepoTestSuite) TestUpdateRefusesRebindingToAnotherNode() {
+	original := s.createUser(domain.User{Username: "grace", NodeId: "node-old"})
+
+	_, err := s.repo.Update(original.Id, domain.User{NodeId: "node-new", Username: "impostor"})
+	s.Require().ErrorIs(err, ErrUserOfAnotherNode)
+
+	got, err := s.repo.Get(original.Id)
+	s.Require().NoError(err)
+	s.Equal("node-old", got.NodeId)
+	s.Equal("grace", got.Username, "a refused claim must not touch the profile")
+	_, err = s.repo.GetByNodeID("node-new")
+	s.Require().ErrorIs(err, ErrUserNotFound)
 }
 
 func (s *UserRepoTestSuite) TestUpdateHandlesExoticProfileText() {

@@ -39,6 +39,7 @@ func (s *stubAuthService) AuthLogin(ev event.LoginEvent, psk security.PSK) (even
 
 func (s *stubAuthService) AuthLogout()                        { s.loggedOut = true }
 func (s *stubAuthService) Reset()                             { s.reset = true }
+func (s *stubAuthService) IsAuthenticated() bool              { return false }
 func (s *stubAuthService) PrivateKey() ed25519.PrivateKey     { return s.privateKey }
 func (s *stubAuthService) Storage() auth.AuthPersistencyLayer { return nil }
 
@@ -485,7 +486,14 @@ func TestAppSignsInAgainAfterLogout(t *testing.T) {
 
 	require.Equal(t, id.String(), signIn().ID, "the first login raises a node")
 
-	resp := callWithin(t, a, AppMessage{MessageId: "logout", Path: event.PRIVATE_POST_LOGOUT, Body: []byte("{}")})
+	resp := callWithin(t, a, AppMessage{
+		MessageId: "login-again", Path: event.PRIVATE_POST_LOGIN,
+		Body: mustJSON(t, event.LoginEvent{Username: "alice", Password: "Owner1234$"}),
+	})
+	require.Contains(t, string(resp.Body), "already authenticated", "a running node is not raised twice")
+	require.Len(t, raised, 1)
+
+	resp = callWithin(t, a, AppMessage{MessageId: "logout", Path: event.PRIVATE_POST_LOGOUT, Body: []byte("{}")})
 	require.JSONEq(t, `["logged_out"]`, string(resp.Body))
 	require.False(t, store.open, "logout closes the database")
 
