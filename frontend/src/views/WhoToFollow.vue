@@ -60,11 +60,11 @@ resulting from the use or misuse of this software.
           </button>
         </div>
 
-        <Users :users="activeProfiles" :loading="loading" />
+        <Users :users="activeProfiles" :loading="loading || Boolean(busy[activeTab])" />
 
         <button
           v-if="hasMore && !loading"
-          :disabled="loadingMore"
+          :disabled="Boolean(busy[activeTab])"
           @click="loadMore()"
           class="p-3 w-full hover:bg-lighter text-center text-blue border-t border-lighter"
         >
@@ -91,6 +91,7 @@ import {networkSections, sectionKey} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
 
 const maxRounds = 5;
+const pageSize = 20;
 
 export default {
   name: "WhoToFollow",
@@ -104,7 +105,7 @@ export default {
   data() {
     return {
       loading: true,
-      loadingMore: false,
+      busy: {},
       activeTab: 'warpnet',
       profiles: [],
       cursors: {},
@@ -131,12 +132,12 @@ export default {
       // Friends of friends first; the order within each part is the node's.
       const sorted = await Promise.all(entries.map(([, page]) => warpnetService.circleFirst(page.users)));
       const cursors = {...this.cursors};
-      const added = new Set();
+      const added = {};
       entries.forEach(([network, page], i) => {
         for (const p of sorted[i]) {
           if (!this.profiles.some((x) => x.id === p.id)) {
             this.profiles.push(p);
-            added.add(network);
+            added[network] = (added[network] || 0) + 1;
           }
         }
         if (page.cursor) {
@@ -148,43 +149,41 @@ export default {
       this.cursors = cursors;
       return added;
     },
-    async loadMore() {
-      if (!this.hasMore || this.loadingMore) {
+    async fill(network, got = 0) {
+      if (this.busy[network]) {
         return;
       }
-      const network = this.activeTab;
-      this.loadingMore = true;
+      this.busy[network] = true;
       try {
-        for (let round = 0; round < maxRounds && this.cursors[network]; round++) {
-          const added = await this.addPages(await warpnetService.getWhoToFollow({[network]: this.cursors[network]}));
-          if (added.has(network)) {
-            break;
-          }
+        for (let round = 0; round < maxRounds && got < pageSize && this.cursors[network]; round++) {
+          const added = await this.addPages(await warpnetService.getWhoToFollow({[network]: this.cursors[network]}, pageSize));
+          got += added[network] || 0;
         }
       } catch (err) {
-        console.error("loading component:", this.$options.name, err);
+        console.error("loading component:", this.$options.name, network, err);
       } finally {
-        this.loadingMore = false;
+        this.busy[network] = false;
+      }
+    },
+    async loadMore() {
+      if (this.hasMore) {
+        await this.fill(this.activeTab);
       }
     },
   },
   async created() {
     console.log("loading component:", this.$options.name);
+    let added = {};
     try {
-      await this.addPages(await warpnetService.getWhoToFollow());
-      for (let round = 1; round < maxRounds; round++) {
-        const empty = Object.entries(this.cursors)
-            .filter(([network]) => !this.profiles.some((p) => sectionKey(p) === network));
-        if (empty.length === 0) {
-          break;
-        }
-        await this.addPages(await warpnetService.getWhoToFollow(Object.fromEntries(empty)));
-      }
+      added = await this.addPages(await warpnetService.getWhoToFollow({}, pageSize));
     } catch (err) {
       console.error("loading component:", this.$options.name, err);
     } finally {
       this.loading = false;
     }
+    await Promise.all(Object.keys(this.cursors)
+        .filter((network) => (added[network] || 0) < pageSize)
+        .map((network) => this.fill(network, added[network] || 0)));
   },
 };
 </script>
