@@ -245,7 +245,7 @@ func TestUserRepoErrorPaths(t *testing.T) {
 			Username:           "alice2",
 			BackgroundImageKey: "bg-key",
 			Website:            &site,
-			NodeId:             "other-node",
+			NodeId:             nodeId,
 			Network:            "warpnet",
 			Metadata:           map[string]string{"a": "1"},
 			Moderation:         &domain.UserModeration{Strikes: 1, Reason: &reason},

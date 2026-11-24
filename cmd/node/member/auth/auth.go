@@ -139,7 +139,6 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		user, err = as.userPersistence.Create(domain.User{
 			CreatedAt:     owner.CreatedAt,
 			Id:            id,
-			NodeId:        "none",
 			Username:      defaultUsername,
 			RoundTripTime: math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
