@@ -172,18 +172,93 @@ describe('WhoToFollow.vue', () => {
     expect(showMore()).toBeInTheDocument();
   });
 
-  it('offers "Show More" on an empty tab that still has a cursor', async () => {
+  it('fills a tab whose first page came back empty but with a cursor', async () => {
     warpnetService.getWhoToFollow
-      .mockResolvedValueOnce({ threads: page([], 't-next') })
-      .mockResolvedValueOnce({ threads: page([{ id: 'me@threads.net', username: 'thr', network: 'threads' }]) });
+      .mockResolvedValueOnce({ warpnet: page([], 'w-1'), mastodon: page([{ id: MASTODON_ID, username: 'bob' }], 'm-1') })
+      .mockResolvedValueOnce({ warpnet: page([], 'w-2') })
+      .mockResolvedValueOnce({ warpnet: page([{ id: WARPNET_ID, username: 'alice' }], 'w-3') });
 
     renderView();
-    await screen.findByText('no-users');
-    await openTab('Threads');
+
+    expect(await screen.findByText('alice')).toBeInTheDocument();
+    expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(1);
+    expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(2, { warpnet: 'w-1' });
+    expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(3, { warpnet: 'w-2' });
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(3);
+    expect(showMore()).toBeInTheDocument();
+  });
+
+  it('asks again only for the networks that are still empty', async () => {
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce({
+        warpnet: page([], 'w-1'),
+        mastodon: page([], 'm-1'),
+        threads: page([{ id: 'me@threads.net', username: 'thr', network: 'threads' }], 't-1'),
+        nostr: page([]),
+      })
+      .mockResolvedValueOnce({ warpnet: page([{ id: WARPNET_ID, username: 'alice' }]), mastodon: page([], 'm-2') })
+      .mockResolvedValueOnce({ mastodon: page([{ id: MASTODON_ID, username: 'bob' }]) });
+
+    renderView();
+
+    expect(await screen.findByText('alice')).toBeInTheDocument();
+    await waitFor(() => expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(3));
+    expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(2, { warpnet: 'w-1', mastodon: 'm-1' });
+    expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(3, { mastodon: 'm-2' });
+    await openTab('Mastodon');
+    expect(await screen.findByText('bob')).toBeInTheDocument();
+  });
+
+  it('stops filling after a bounded number of rounds', async () => {
+    warpnetService.getWhoToFollow.mockImplementation(async () => ({ warpnet: page([], 'w-more') }));
+
+    renderView();
+
+    expect(await screen.findByText('no-users')).toBeInTheDocument();
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(5);
+    expect(showMore()).toBeInTheDocument();
+  });
+
+  it('lets "Show More" skip pages that come back empty', async () => {
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce({ warpnet: page([{ id: WARPNET_ID, username: 'alice' }], 'w-1') })
+      .mockResolvedValueOnce({ warpnet: page([], 'w-2') })
+      .mockResolvedValueOnce({ warpnet: page([], 'w-3') })
+      .mockResolvedValueOnce({ warpnet: page([{ id: WARPNET_ID_2, username: 'carol' }], 'w-4') });
+
+    renderView();
+    await screen.findByText('alice');
     await fireEvent.click(showMore());
 
-    expect(await screen.findByText('thr')).toBeInTheDocument();
-    expect(warpnetService.getWhoToFollow).toHaveBeenLastCalledWith({ threads: 't-next' });
+    expect(await screen.findByText('carol')).toBeInTheDocument();
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(4);
+    expect(warpnetService.getWhoToFollow).toHaveBeenLastCalledWith({ warpnet: 'w-3' });
+  });
+
+  it('stops a "Show More" that finds nobody after a bounded number of rounds', async () => {
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce({ warpnet: page([{ id: WARPNET_ID, username: 'alice' }], 'w-1') })
+      .mockImplementation(async () => ({ warpnet: page([], 'w-more') }));
+
+    renderView();
+    await screen.findByText('alice');
+    await fireEvent.click(showMore());
+
+    await waitFor(() => expect(showMore()).not.toBeDisabled());
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(6);
+  });
+
+  it('stops a "Show More" as soon as the network ends', async () => {
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce({ warpnet: page([{ id: WARPNET_ID, username: 'alice' }], 'w-1') })
+      .mockResolvedValueOnce({ warpnet: page([]) });
+
+    renderView();
+    await screen.findByText('alice');
+    await fireEvent.click(showMore());
+
+    await waitFor(noShowMore);
+    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(2);
   });
 
   it('navigates home when the back button is clicked', async () => {

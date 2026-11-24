@@ -90,6 +90,8 @@ import {warpnetService} from "@/service/service";
 import {networkSections, sectionKey} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
 
+const maxRounds = 5;
+
 export default {
   name: "WhoToFollow",
   components: {
@@ -129,10 +131,12 @@ export default {
       // Friends of friends first; the order within each part is the node's.
       const sorted = await Promise.all(entries.map(([, page]) => warpnetService.circleFirst(page.users)));
       const cursors = {...this.cursors};
+      const added = new Set();
       entries.forEach(([network, page], i) => {
         for (const p of sorted[i]) {
           if (!this.profiles.some((x) => x.id === p.id)) {
             this.profiles.push(p);
+            added.add(network);
           }
         }
         if (page.cursor) {
@@ -142,6 +146,7 @@ export default {
         }
       });
       this.cursors = cursors;
+      return added;
     },
     async loadMore() {
       if (!this.hasMore || this.loadingMore) {
@@ -150,7 +155,12 @@ export default {
       const network = this.activeTab;
       this.loadingMore = true;
       try {
-        await this.addPages(await warpnetService.getWhoToFollow({[network]: this.cursors[network]}));
+        for (let round = 0; round < maxRounds && this.cursors[network]; round++) {
+          const added = await this.addPages(await warpnetService.getWhoToFollow({[network]: this.cursors[network]}));
+          if (added.has(network)) {
+            break;
+          }
+        }
       } catch (err) {
         console.error("loading component:", this.$options.name, err);
       } finally {
@@ -162,6 +172,14 @@ export default {
     console.log("loading component:", this.$options.name);
     try {
       await this.addPages(await warpnetService.getWhoToFollow());
+      for (let round = 1; round < maxRounds; round++) {
+        const empty = Object.entries(this.cursors)
+            .filter(([network]) => !this.profiles.some((p) => sectionKey(p) === network));
+        if (empty.length === 0) {
+          break;
+        }
+        await this.addPages(await warpnetService.getWhoToFollow(Object.fromEntries(empty)));
+      }
     } catch (err) {
       console.error("loading component:", this.$options.name, err);
     } finally {
