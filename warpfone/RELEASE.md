@@ -8,8 +8,8 @@ to App Store Connect, from where the build goes to TestFlight. It does not
 change the version; tag a commit whose `Version.xcconfig` carries the version
 to ship. Each upload needs a build number App Store Connect has not seen, and
 `CURRENT_PROJECT_VERSION` follows the version file, so every version can be
-uploaded once. The `Release` workflow calls it for every release, so the iOS
-app ships with the desktop and Android builds; it can also be run alone.
+uploaded once. It is not part of the `Release` workflow: most releases don't
+touch warpfone, so run it by hand with the tag to ship to TestFlight.
 
 The workflow reads these repository secrets:
 
