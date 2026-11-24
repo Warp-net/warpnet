@@ -58,6 +58,8 @@ const (
 	// so a check for "bridged in from outside" must use IsBridged.
 	ThreadsNetwork = "threads"
 
+	NostrNetwork = "nostr"
+
 	// EntryHandle is the single Mastodon account seeded locally as the entry
 	// point into the Fediverse; its followings lead to other Mastodon accounts.
 	EntryHandle = "warpnet@mastodon.social"

@@ -74,7 +74,6 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 				getFn: func(userId string) (domain.User, error) {
 					return domain.User{Id: owner, Network: warpnet.WarpnetName}, nil
 				},
-				listNetworksFn: func() ([]string, error) { return []string{bridge.MastodonNetwork}, nil },
 			},
 			stubUserFollowsCounter{},
 			stubUserStreamer{},
@@ -151,13 +150,11 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			warpnet.WarpnetName:    {{Id: "warp-1", NodeId: "n1", Network: warpnet.WarpnetName}},
 			bridge.MastodonNetwork: {{Id: "alice@mastodon.social", NodeId: "gateway", Network: bridge.MastodonNetwork}},
 			bridge.ThreadsNetwork:  {{Id: "zuck@threads.net", NodeId: "gateway", Network: bridge.ThreadsNetwork}},
+			bridge.NostrNetwork:    {{Id: "npub1@nostr.example", NodeId: "gateway", Network: bridge.NostrNetwork}},
 		}
 		h := StreamGetWhoToFollowHandler(
 			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-owner"}},
 			stubUserFetcher{
-				listNetworksFn: func() ([]string, error) {
-					return []string{warpnet.WarpnetName, bridge.MastodonNetwork, bridge.ThreadsNetwork}, nil
-				},
 				whoToFollowFn: func(network string, _ *uint64, _ *string) ([]domain.User, string, error) {
 					return pages[network], network + "-next", nil
 				},
@@ -195,10 +192,6 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		h := StreamGetWhoToFollowHandler(
 			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubUserFetcher{
-				listNetworksFn: func() ([]string, error) {
-					t.Error("networks must come from the cursors")
-					return nil, nil
-				},
 				whoToFollowFn: func(network string, _ *uint64, cursor *string) ([]domain.User, string, error) {
 					mx.Lock()
 					asked[network] = *cursor

@@ -116,15 +116,6 @@ func TestUserRepoErrorPaths(t *testing.T) {
 			ops: []faultOp{op("List")},
 		},
 		{
-			name: "ListNetworks",
-			seed: seedUser,
-			run: func(s *faultStore) error {
-				_, err := NewUserRepo(s).ListNetworks()
-				return err
-			},
-			ops: []faultOp{op("List")},
-		},
-		{
 			name: "GetBatch",
 			seed: seedUser,
 			run: func(s *faultStore) error {
@@ -223,8 +214,6 @@ func TestUserRepoErrorPaths(t *testing.T) {
 		_, _, err = repo.Search("alice", nil, nil)
 		require.Error(t, err)
 		_, _, err = repo.WhoToFollow(warpnet.WarpnetName, nil, nil)
-		require.Error(t, err)
-		_, err = repo.ListNetworks()
 		require.Error(t, err)
 		_, err = repo.GetBatch(userId)
 		require.Error(t, err)

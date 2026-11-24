@@ -108,79 +108,6 @@ func TestResolveNetwork(t *testing.T) {
 	}
 }
 
-func TestListNetworksEdges(t *testing.T) {
-	t.Run("an empty store lists nothing", func(t *testing.T) {
-		networks, err := newWhoToFollowRepo(t).ListNetworks()
-		require.NoError(t, err)
-		require.Empty(t, networks)
-	})
-
-	t.Run("a network whose every account is offline is not listed", func(t *testing.T) {
-		repo := newWhoToFollowRepo(t)
-		putUsers(t, repo,
-			domain.User{Id: "a@m.example", Network: "mastodon", IsOffline: true},
-			domain.User{Id: "b@m.example", Network: "mastodon", IsOffline: true},
-			domain.User{Id: "c@t.example", Network: "threads"},
-		)
-		networks, err := repo.ListNetworks()
-		require.NoError(t, err)
-		require.Equal(t, []string{"threads"}, networks)
-	})
-
-	t.Run("the order is the keyspace order and does not wobble", func(t *testing.T) {
-		repo := newWhoToFollowRepo(t)
-		putUsers(t, repo,
-			domain.User{Id: "c@t.example", Network: "threads"},
-			domain.User{Id: "a@m.example", Network: "mastodon"},
-			domain.User{Id: "b@n.example", Network: "nostr"},
-			domain.User{Id: "d@m.example", Network: "mastodon"},
-		)
-		first, err := repo.ListNetworks()
-		require.NoError(t, err)
-		require.Equal(t, []string{"mastodon", "nostr", "threads"}, first)
-		for range 20 {
-			again, err := repo.ListNetworks()
-			require.NoError(t, err)
-			require.Equal(t, first, again)
-		}
-	})
-
-	t.Run("a network on the second scan page is listed", func(t *testing.T) {
-		repo := newWhoToFollowRepo(t)
-		putUsers(t, repo, bulkUsers("mastodon", "aaa", int(recommendedScanPage)+50)...)
-		putUsers(t, repo, domain.User{Id: "zzz@t.example", Network: "threads"})
-		networks, err := repo.ListNetworks()
-		require.NoError(t, err)
-		require.Equal(t, []string{"mastodon", "threads"}, networks)
-	})
-
-	t.Run("a network buried past the scan budget stays unlisted", func(t *testing.T) {
-		repo := newWhoToFollowRepo(t)
-		putUsers(t, repo, bulkUsers("mastodon", "aaa", maxRecommendedScan)...)
-		putUsers(t, repo, domain.User{Id: "zzz@t.example", Network: "threads"})
-		networks, err := repo.ListNetworks()
-		require.NoError(t, err)
-		require.Equal(t, []string{"mastodon"}, networks)
-	})
-
-	t.Run("a corrupt row fails the listing", func(t *testing.T) {
-		repo := newWhoToFollowRepo(t)
-		putUsers(t, repo, domain.User{Id: "a@m.example", Network: "mastodon"})
-		putRows(t, repo, map[string][]byte{"broken": []byte(`{"id":`)})
-		_, err := repo.ListNetworks()
-		require.Error(t, err)
-	})
-
-	t.Run("node and fixed keys never pass for users", func(t *testing.T) {
-		repo := newWhoToFollowRepo(t)
-		_, err := repo.Create(domain.User{Id: "a@m.example", NodeId: "gateway", Network: "mastodon"})
-		require.NoError(t, err)
-		networks, err := repo.ListNetworks()
-		require.NoError(t, err)
-		require.Equal(t, []string{"mastodon"}, networks)
-	})
-}
-
 func TestWhoToFollowLimits(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	putUsers(t, repo, bulkUsers("mastodon", "aaa", int(local_store.MaxPageLimit)+5)...)
@@ -478,13 +405,6 @@ func TestWhoToFollowConcurrentReaders(t *testing.T) {
 				}
 			}()
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if _, err := repo.ListNetworks(); err != nil {
-				t.Errorf("list networks: %v", err)
-			}
-		}()
 	}
 	wg.Wait()
 }

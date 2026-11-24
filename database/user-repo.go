@@ -570,52 +570,6 @@ func resolveNetwork(u domain.User) string {
 	return ""
 }
 
-func (repo *UserRepo) ListNetworks() ([]string, error) {
-	prefix := local_store.NewPrefixBuilder(UsersRepoName).
-		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
-		Build()
-
-	txn, err := repo.db.NewTxn()
-	if err != nil {
-		return nil, err
-	}
-	defer txn.Rollback()
-
-	var networks []string
-	seen := map[string]struct{}{}
-	page := recommendedScanPage
-	cursor := ""
-	for scanned := 0; scanned < maxRecommendedScan; {
-		from := cursor
-		items, next, err := txn.List(prefix, &page, &from)
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range items {
-			scanned++
-			var u domain.User
-			if err := json.Unmarshal(item.Value, &u); err != nil {
-				return nil, err
-			}
-			if u.IsOffline {
-				continue
-			}
-			network := resolveNetwork(u)
-			if _, ok := seen[network]; ok {
-				continue
-			}
-			seen[network] = struct{}{}
-			networks = append(networks, network)
-		}
-		if len(items) == 0 || next == "" || next == local_store.EndCursor {
-			break
-		}
-		cursor = next
-	}
-	return networks, nil
-}
-
 func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {

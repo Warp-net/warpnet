@@ -64,52 +64,62 @@ func gatewayProbe() (stubUserStreamer, func(time.Duration) bool) {
 	}
 }
 
+var knownNetworks = []string{warpnet.WarpnetName, bridge.MastodonNetwork, bridge.ThreadsNetwork, bridge.NostrNetwork}
+
+func pageRecorder() (stubUserFetcher, func() map[string]string) {
+	var mx sync.Mutex
+	asked := map[string]string{}
+	users := stubUserFetcher{whoToFollowFn: func(network string, _ *uint64, cursor *string) ([]domain.User, string, error) {
+		mx.Lock()
+		asked[network] = *cursor
+		mx.Unlock()
+		return nil, "end", nil
+	}}
+	return users, func() map[string]string {
+		mx.Lock()
+		defer mx.Unlock()
+		return asked
+	}
+}
+
+func firstPage() map[string]string {
+	cursors := make(map[string]string, len(knownNetworks))
+	for _, network := range knownNetworks {
+		cursors[network] = ""
+	}
+	return cursors
+}
+
 func TestWhoToFollowHandlerRequestShapes(t *testing.T) {
-	t.Run("a network listing failure fails the request before any page is read", func(t *testing.T) {
-		listErr := errors.New("index unreadable")
-		users := stubUserFetcher{
-			listNetworksFn: func() ([]string, error) { return nil, listErr },
-			whoToFollowFn: func(string, *uint64, *string) ([]domain.User, string, error) {
-				t.Error("no page may be read without the network list")
-				return nil, "", nil
-			},
+	t.Run("a first page reads every known network once, from the start", func(t *testing.T) {
+		var calls atomic.Int32
+		users, asked := pageRecorder()
+		record := users.whoToFollowFn
+		users.whoToFollowFn = func(network string, limit *uint64, cursor *string) ([]domain.User, string, error) {
+			calls.Add(1)
+			return record(network, limit, cursor)
 		}
-		_, err := callWhoToFollow(t, users, stubUserFollowsCounter{}, stubUserStreamer{}, event.GetAllUsersEvent{UserId: wtfOwner})
-		require.ErrorIs(t, err, listErr)
+		resp, err := callWhoToFollow(t, users, stubUserFollowsCounter{}, stubUserStreamer{}, event.GetAllUsersEvent{UserId: wtfOwner})
+		require.NoError(t, err)
+		require.Equal(t, firstPage(), asked())
+		require.EqualValues(t, len(knownNetworks), calls.Load())
+		require.Len(t, resp.Networks, len(knownNetworks))
 	})
 
-	t.Run("a store with no networks answers empty lists, not nulls", func(t *testing.T) {
-		users := stubUserFetcher{listNetworksFn: func() ([]string, error) { return nil, nil }}
-		resp, err := callWhoToFollow(t, users, stubUserFollowsCounter{}, stubUserStreamer{}, event.GetAllUsersEvent{UserId: wtfOwner})
+	t.Run("an empty store answers empty lists, not nulls", func(t *testing.T) {
+		resp, err := callWhoToFollow(t, stubUserFetcher{}, stubUserFollowsCounter{}, stubUserStreamer{}, event.GetAllUsersEvent{UserId: wtfOwner})
 		require.NoError(t, err)
 		wire, err := json.Marshal(resp)
 		require.NoError(t, err)
-		require.Contains(t, string(wire), `"networks":{}`)
-		require.Contains(t, string(wire), `"users":[]`)
-	})
-
-	t.Run("a network listed twice is read once", func(t *testing.T) {
-		var calls atomic.Int32
-		users := stubUserFetcher{
-			listNetworksFn: func() ([]string, error) {
-				return []string{bridge.MastodonNetwork, bridge.MastodonNetwork, warpnet.WarpnetName, bridge.MastodonNetwork}, nil
-			},
-			whoToFollowFn: func(string, *uint64, *string) ([]domain.User, string, error) {
-				calls.Add(1)
-				return nil, "end", nil
-			},
+		require.NotContains(t, string(wire), "null")
+		for _, network := range knownNetworks {
+			require.NotNil(t, resp.Networks[network].Users, network)
 		}
-		resp, err := callWhoToFollow(t, users, stubUserFollowsCounter{}, stubUserStreamer{}, event.GetAllUsersEvent{UserId: wtfOwner})
-		require.NoError(t, err)
-		require.Len(t, resp.Networks, 2)
-		require.EqualValues(t, 2, calls.Load())
 	})
 
 	t.Run("one failing network fails the whole answer", func(t *testing.T) {
 		pageErr := errors.New("threads page corrupt")
-		networks := []string{warpnet.WarpnetName, bridge.MastodonNetwork, bridge.ThreadsNetwork, "nostr"}
 		users := stubUserFetcher{
-			listNetworksFn: func() ([]string, error) { return networks, nil },
 			whoToFollowFn: func(network string, _ *uint64, _ *string) ([]domain.User, string, error) {
 				if network == bridge.ThreadsNetwork {
 					return nil, "", pageErr
@@ -148,10 +158,6 @@ func TestWhoToFollowHandlerRequestShapes(t *testing.T) {
 		streamer, gatewayAsked := gatewayProbe()
 		var asked []string
 		users := stubUserFetcher{
-			listNetworksFn: func() ([]string, error) {
-				t.Error("a paging request must not list networks")
-				return nil, nil
-			},
 			whoToFollowFn: func(network string, _ *uint64, cursor *string) ([]domain.User, string, error) {
 				asked = append(asked, network+":"+*cursor)
 				return nil, "end", nil
@@ -166,18 +172,11 @@ func TestWhoToFollowHandlerRequestShapes(t *testing.T) {
 	})
 
 	t.Run("an empty legacy cursor is a first page", func(t *testing.T) {
-		var listed atomic.Bool
-		users := stubUserFetcher{
-			listNetworksFn: func() ([]string, error) {
-				listed.Store(true)
-				return []string{"nostr"}, nil
-			},
-		}
+		users, asked := pageRecorder()
 		empty := ""
-		resp, err := callWhoToFollow(t, users, stubUserFollowsCounter{}, stubUserStreamer{}, event.GetAllUsersEvent{UserId: wtfOwner, Cursor: &empty})
+		_, err := callWhoToFollow(t, users, stubUserFollowsCounter{}, stubUserStreamer{}, event.GetAllUsersEvent{UserId: wtfOwner, Cursor: &empty})
 		require.NoError(t, err)
-		require.True(t, listed.Load())
-		require.Contains(t, resp.Networks, "nostr")
+		require.Equal(t, firstPage(), asked())
 	})
 
 	for name, body := range map[string]string{
@@ -185,14 +184,10 @@ func TestWhoToFollowHandlerRequestShapes(t *testing.T) {
 		"empty cursors": `{"user_id":"owner-1","cursors":{}}`,
 	} {
 		t.Run(name+" are a first page", func(t *testing.T) {
-			var listed atomic.Bool
-			users := stubUserFetcher{listNetworksFn: func() ([]string, error) {
-				listed.Store(true)
-				return nil, nil
-			}}
+			users, asked := pageRecorder()
 			_, err := callWhoToFollow(t, users, stubUserFollowsCounter{}, stubUserStreamer{}, []byte(body))
 			require.NoError(t, err)
-			require.True(t, listed.Load())
+			require.Equal(t, firstPage(), asked())
 		})
 	}
 
@@ -315,9 +310,6 @@ func TestWhoToFollowHandlerFanOut(t *testing.T) {
 	t.Run("followings and the profile are read once, not per network", func(t *testing.T) {
 		var followings, profiles atomic.Int32
 		users := stubUserFetcher{
-			listNetworksFn: func() ([]string, error) {
-				return []string{warpnet.WarpnetName, bridge.MastodonNetwork, bridge.ThreadsNetwork, "nostr"}, nil
-			},
 			getFn: func(id string) (domain.User, error) {
 				profiles.Add(1)
 				return domain.User{Id: id, Network: warpnet.WarpnetName}, nil
@@ -384,8 +376,7 @@ func TestWhoToFollowHandlerFilters(t *testing.T) {
 
 	t.Run("one node per network: the same node may show up in two networks", func(t *testing.T) {
 		users := stubUserFetcher{
-			getFn:          ownProfile,
-			listNetworksFn: func() ([]string, error) { return []string{warpnet.WarpnetName, bridge.MastodonNetwork}, nil },
+			getFn: ownProfile,
 			whoToFollowFn: func(network string, _ *uint64, _ *string) ([]domain.User, string, error) {
 				return []domain.User{{Id: network + "-on-shared", NodeId: "shared-node", Network: network}}, "end", nil
 			},
@@ -398,8 +389,7 @@ func TestWhoToFollowHandlerFilters(t *testing.T) {
 
 	t.Run("bridged accounts behind one gateway node are all kept", func(t *testing.T) {
 		users := stubUserFetcher{
-			getFn:          ownProfile,
-			listNetworksFn: func() ([]string, error) { return []string{bridge.MastodonNetwork}, nil },
+			getFn: ownProfile,
 			whoToFollowFn: func(string, *uint64, *string) ([]domain.User, string, error) {
 				return []domain.User{
 					{Id: "a@mastodon.social", NodeId: "gateway", Network: bridge.MastodonNetwork},
@@ -468,8 +458,7 @@ func TestWhoToFollowHandlerFilters(t *testing.T) {
 
 	t.Run("the owner is hidden in every disguise and every network", func(t *testing.T) {
 		users := stubUserFetcher{
-			getFn:          ownProfile,
-			listNetworksFn: func() ([]string, error) { return []string{warpnet.WarpnetName, bridge.MastodonNetwork}, nil },
+			getFn: ownProfile,
 			whoToFollowFn: func(network string, _ *uint64, _ *string) ([]domain.User, string, error) {
 				return []domain.User{
 					{Id: wtfOwner, NodeId: "own-node", Network: network},
@@ -512,9 +501,6 @@ func TestWhoToFollowHandlerFilters(t *testing.T) {
 			getFn: func(id string) (domain.User, error) {
 				return domain.User{Id: id, Network: bridge.MastodonNetwork}, nil
 			},
-			listNetworksFn: func() ([]string, error) {
-				return []string{warpnet.WarpnetName, bridge.MastodonNetwork, bridge.ThreadsNetwork}, nil
-			},
 			whoToFollowFn: func(network string, _ *uint64, _ *string) ([]domain.User, string, error) {
 				return []domain.User{{Id: network + "-user", NodeId: network + "-node", Network: network}}, "end", nil
 			},
@@ -528,7 +514,6 @@ func TestWhoToFollowHandlerFilters(t *testing.T) {
 
 	t.Run("another Warpnet profile shows no bridged networks", func(t *testing.T) {
 		users := stubUserFetcher{
-			listNetworksFn: func() ([]string, error) { return []string{warpnet.WarpnetName, bridge.MastodonNetwork}, nil },
 			whoToFollowFn: func(network string, _ *uint64, _ *string) ([]domain.User, string, error) {
 				return []domain.User{{Id: network + "-user", NodeId: network + "-node", Network: network}}, "end", nil
 			},
@@ -556,7 +541,6 @@ func TestWhoToFollowHandlerFilters(t *testing.T) {
 
 func TestWhoToFollowHandlerWireCompat(t *testing.T) {
 	users := stubUserFetcher{
-		listNetworksFn: func() ([]string, error) { return []string{"", warpnet.WarpnetName, bridge.MastodonNetwork}, nil },
 		whoToFollowFn: func(network string, _ *uint64, _ *string) ([]domain.User, string, error) {
 			return []domain.User{{Id: "user-of-" + network, NodeId: "node-of-" + network, Network: network}}, "next-" + network, nil
 		},
@@ -575,8 +559,9 @@ func TestWhoToFollowHandlerWireCompat(t *testing.T) {
 
 		var current event.WhoToFollowResponse
 		require.NoError(t, json.Unmarshal(wire, &current))
-		require.Len(t, current.Networks, 3)
-		require.Equal(t, "next-", current.Networks[""].Cursor)
+		require.Len(t, current.Networks, len(knownNetworks))
+		require.Equal(t, "next-mastodon", current.Networks[bridge.MastodonNetwork].Cursor)
+		require.NotContains(t, current.Networks, "", "untagged rows are not a network of their own")
 	})
 
 	t.Run("untagged rows are never promoted to the Warpnet page", func(t *testing.T) {

@@ -433,10 +433,6 @@ func TestWhoToFollowFindsTheOnlyAccountOfANetwork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	networks, err := repo.ListNetworks()
-	require.NoError(t, err)
-	require.Equal(t, []string{"mastodon", "threads"}, networks)
-
 	limit := uint64(10)
 	users, cur, err := repo.WhoToFollow("threads", &limit, nil)
 	require.NoError(t, err)
@@ -459,10 +455,6 @@ func TestWhoToFollowListsAnyNumberOfNetworks(t *testing.T) {
 	for _, sd := range seeded {
 		seedNetwork(t, repo, sd.network, sd.prefix, sd.host, sd.n)
 	}
-
-	networks, err := repo.ListNetworks()
-	require.NoError(t, err)
-	require.Equal(t, []string{"mastodon", "threads", "bluesky", "nostr"}, networks)
 
 	limit := uint64(10)
 	for _, sd := range seeded {
@@ -503,10 +495,6 @@ func TestWhoToFollowKeepsUntaggedRowsInTheirOwnBucket(t *testing.T) {
 	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 9)
 	seedNetwork(t, repo, "", "bbb", "legacy.example", 2)
 
-	networks, err := repo.ListNetworks()
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"mastodon", ""}, networks)
-
 	limit := uint64(4)
 	users, _, err := repo.WhoToFollow("", &limit, nil)
 	require.NoError(t, err)
@@ -522,10 +510,6 @@ func TestWhoToFollowFoldsNativeTagsIntoWarpnet(t *testing.T) {
 		require.NoError(t, err)
 	}
 	seedNetwork(t, repo, "threads", "zzz", "threads.net", 1)
-
-	networks, err := repo.ListNetworks()
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{warpnet.WarpnetName, "threads"}, networks)
 
 	limit := uint64(10)
 	users, _, err := repo.WhoToFollow(warpnet.WarpnetName, &limit, nil)

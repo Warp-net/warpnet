@@ -189,7 +189,6 @@ type UserProvider interface {
 	GetBatch(userIds ...string) (users []domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 	WhoToFollow(network string, limit *uint64, cursor *string) ([]domain.User, string, error)
-	ListNetworks() ([]string, error)
 }
 
 type AliasesProvider interface {

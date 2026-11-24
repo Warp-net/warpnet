@@ -12,6 +12,13 @@ import (
 	"sync"
 )
 
+var recommendedNetworks = []string{
+	warpnet.WarpnetName,
+	bridge.MastodonNetwork,
+	bridge.ThreadsNetwork,
+	bridge.NostrNetwork,
+}
+
 type WhoToFollowAuthStorer interface {
 	GetOwner() domain.Owner
 }
@@ -48,12 +55,8 @@ func StreamGetWhoToFollowHandler(
 		}
 
 		if len(cursors) == 0 {
-			networks, err := userRepo.ListNetworks()
-			if err != nil {
-				return nil, err
-			}
-			cursors = make(map[string]string, len(networks))
-			for _, network := range networks {
+			cursors = make(map[string]string, len(recommendedNetworks))
+			for _, network := range recommendedNetworks {
 				cursors[network] = ""
 			}
 		}

@@ -29,7 +29,6 @@ func (s stubSearchUserFetcher) Search(q string, l *uint64, c *string) ([]domain.
 func (s stubSearchUserFetcher) WhoToFollow(_ string, _ *uint64, _ *string) ([]domain.User, string, error) {
 	return nil, "end", nil
 }
-func (s stubSearchUserFetcher) ListNetworks() ([]string, error)                     { return nil, nil }
 func (s stubSearchUserFetcher) Update(_ string, u domain.User) (domain.User, error) { return u, nil }
 func (s stubSearchUserFetcher) CreateWithTTL(u domain.User, _ time.Duration) (domain.User, error) {
 	return u, nil
