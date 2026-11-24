@@ -648,7 +648,7 @@ func (t *warpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
-	p := prefix.asPrefix().Bytes()
+	p := []byte(prefix + Delimeter)
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = false
 	opts.Prefix = p
@@ -673,7 +673,7 @@ func (t *warpTxn) ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) e
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
-	p := prefix.asPrefix().Bytes()
+	p := []byte(prefix + Delimeter)
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = false
 	opts.Reverse = true
@@ -791,7 +791,7 @@ func iterate(
 	if startCursor.String() == endCursor {
 		return endCursor, nil
 	}
-	prefixBytes := prefix.asPrefix().Bytes()
+	prefixBytes := []byte(prefix + Delimeter)
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = false
 	opts.Reverse = reverse

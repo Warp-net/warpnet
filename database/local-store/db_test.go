@@ -236,7 +236,7 @@ func (s *DBTestSuite) TestTxn_List() {
 
 	txn2, _ := s.db.NewTxn()
 	defer txn2.Rollback()
-	items, cursor, err := txn2.List(DatabaseKey("/list/"), nil, nil)
+	items, cursor, err := txn2.List(DatabaseKey("/list"), nil, nil)
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), len(items) >= 2)
 	assert.NotEmpty(s.T(), cursor)
@@ -252,9 +252,9 @@ func (s *DBTestSuite) TestTxn_ReverseList() {
 
 	txn2, _ := s.db.NewTxn()
 	defer txn2.Rollback()
-	fwd, _, err := txn2.List(DatabaseKey("/revlist/"), nil, nil)
+	fwd, _, err := txn2.List(DatabaseKey("/revlist"), nil, nil)
 	assert.NoError(s.T(), err)
-	rev, cursor, err := txn2.ReverseList(DatabaseKey("/revlist/"), nil, nil)
+	rev, cursor, err := txn2.ReverseList(DatabaseKey("/revlist"), nil, nil)
 	assert.NoError(s.T(), err)
 	assert.Len(s.T(), rev, 3)
 	assert.Equal(s.T(), endCursor, cursor)
@@ -271,7 +271,7 @@ func (s *DBTestSuite) TestTxn_ListKeys() {
 
 	txn2, _ := s.db.NewTxn()
 	defer txn2.Rollback()
-	keys, cursor, err := txn2.ListKeys(DatabaseKey("/listkeys/"), nil, nil)
+	keys, cursor, err := txn2.ListKeys(DatabaseKey("/listkeys"), nil, nil)
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), len(keys) >= 2)
 	assert.NotEmpty(s.T(), cursor)

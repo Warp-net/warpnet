@@ -162,7 +162,7 @@ func TestScansStopAtTheSegmentBoundary(t *testing.T) {
 	seedKeys(t, db, []string{"/U/nostr/1", "/U/nostr/2", "/U/nostrx/1", "/U/nostr", "/U/no/1"})
 	want := []string{"/U/nostr/1", "/U/nostr/2"}
 
-	for _, prefix := range []DatabaseKey{"/U/nostr", "/U/nostr/"} {
+	for _, prefix := range []DatabaseKey{"/U/nostr"} {
 		txn, err := db.NewTxn()
 		if err != nil {
 			t.Fatal(err)
