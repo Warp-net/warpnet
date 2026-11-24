@@ -408,3 +408,169 @@ func TestWhoToFollowConcurrentReaders(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func userRowKeyIn(root, id string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace).
+		AddRootID(root).
+		AddRange(local_store.RangePrefix("500")).
+		AddParentId(id).
+		Build()
+}
+
+func storedKeyOf(t *testing.T, repo *UserRepo, id string) string {
+	t.Helper()
+	fixed := local_store.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace).
+		AddRootID("None").
+		AddRange(local_store.FixedRangeKey).
+		AddParentId(id).
+		Build()
+	key, err := repo.db.Get(fixed)
+	require.NoError(t, err)
+	return string(key)
+}
+
+func TestUserRowsLiveUnderTheirNetwork(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	native := ulid.Make().String()
+	for _, u := range []domain.User{
+		{Id: "a@mastodon.social", NodeId: "gateway", Network: "mastodon"},
+		{Id: "b@threads.net", NodeId: "gateway", Network: "threads"},
+		{Id: "npub1x@nostr.com", NodeId: "gateway", Network: "nostr"},
+		{Id: native, NodeId: "node-1", Network: "testnet"},
+		{Id: "untagged@legacy.example", NodeId: "node-2"},
+	} {
+		_, err := repo.Create(u)
+		require.NoError(t, err)
+	}
+
+	for id, root := range map[string]string{
+		"a@mastodon.social":       "/USERS/USER/mastodon/",
+		"b@threads.net":           "/USERS/USER/threads/",
+		"npub1x@nostr.com":        "/USERS/USER/nostr/",
+		native:                    "/USERS/USER/" + warpnet.WarpnetName + "/",
+		"untagged@legacy.example": "/USERS/USER/None/",
+	} {
+		require.True(t, strings.HasPrefix(storedKeyOf(t, repo, id), root), id)
+		got, err := repo.Get(id)
+		require.NoError(t, err)
+		require.Equal(t, id, got.Id)
+	}
+
+	t.Run("an update keeps the row where it is", func(t *testing.T) {
+		_, err := repo.Update("a@mastodon.social", domain.User{Bio: "hi", IsOffline: false})
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(storedKeyOf(t, repo, "a@mastodon.social"), "/USERS/USER/mastodon/"))
+		got, err := repo.Get("a@mastodon.social")
+		require.NoError(t, err)
+		require.Equal(t, "hi", got.Bio)
+	})
+
+	t.Run("a deleted row leaves the recommendations", func(t *testing.T) {
+		require.NoError(t, repo.Delete("npub1x@nostr.com"))
+		users, _, err := repo.WhoToFollow("nostr", nil, nil)
+		require.NoError(t, err)
+		require.Empty(t, users)
+	})
+
+	t.Run("list and search see every root", func(t *testing.T) {
+		limit := uint64(100)
+		all, _, err := repo.List(&limit, nil)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{"a@mastodon.social", "b@threads.net", native, "untagged@legacy.example"}, idsOfUsers(all))
+
+		hits, _, err := repo.Search("threads", &limit, nil)
+		require.NoError(t, err)
+		require.Equal(t, []string{"b@threads.net"}, idsOfUsers(hits))
+	})
+}
+
+func TestWhoToFollowReadsItsNetworkRootFirst(t *testing.T) {
+	t.Run("a network's own rows are found past any amount of old rows", func(t *testing.T) {
+		repo := newWhoToFollowRepo(t)
+		putUsers(t, repo, bulkUsers("mastodon", "aaa", maxRecommendedScan+10)...)
+		_, err := repo.Create(domain.User{Id: "zzz@threads.net", NodeId: "gateway", Network: "threads"})
+		require.NoError(t, err)
+
+		users, _, err := repo.WhoToFollow("threads", nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, []string{"zzz@threads.net"}, idsOfUsers(users))
+	})
+
+	t.Run("old rows of the network follow its own rows, each once", func(t *testing.T) {
+		repo := newWhoToFollowRepo(t)
+		for i := range 3 {
+			_, err := repo.Create(domain.User{Id: fmt.Sprintf("new%d@mastodon.social", i), NodeId: "gateway", Network: "mastodon"})
+			require.NoError(t, err)
+		}
+		putUsers(t, repo, bulkUsers("mastodon", "old", 3)...)
+		putUsers(t, repo, bulkUsers("threads", "thr", 2)...)
+
+		ids := pageAll(t, repo, "mastodon", 2)
+		require.Len(t, ids, 6)
+		require.Equal(t, []string{"new0@mastodon.social", "new1@mastodon.social", "new2@mastodon.social"}, ids[:3])
+	})
+
+	t.Run("a page that fills at the end of the own rows goes on with the old ones", func(t *testing.T) {
+		repo := newWhoToFollowRepo(t)
+		for i := range 2 {
+			_, err := repo.Create(domain.User{Id: fmt.Sprintf("new%d@mastodon.social", i), NodeId: "gateway", Network: "mastodon"})
+			require.NoError(t, err)
+		}
+		putUsers(t, repo, bulkUsers("mastodon", "old", 1)...)
+
+		limit := uint64(2)
+		users, next, err := repo.WhoToFollow("mastodon", &limit, nil)
+		require.NoError(t, err)
+		require.Len(t, users, 2)
+		require.Equal(t, "/USERS/USER/None/", next)
+
+		rest, end, err := repo.WhoToFollow("mastodon", &limit, &next)
+		require.NoError(t, err)
+		require.Equal(t, []string{"old00000@mastodon.example"}, idsOfUsers(rest))
+		require.Equal(t, local_store.EndCursor, end)
+	})
+
+	t.Run("a budget spent on the own rows hands over to the old ones", func(t *testing.T) {
+		repo := newWhoToFollowRepo(t)
+		rows := make(map[string][]byte, maxRecommendedScan)
+		for i := range maxRecommendedScan {
+			id := fmt.Sprintf("gone%05d@mastodon.social", i)
+			data, err := json.Marshal(domain.User{Id: id, Network: "mastodon", IsOffline: true})
+			require.NoError(t, err)
+			rows[id] = data
+		}
+		txn, err := repo.db.NewTxn()
+		require.NoError(t, err)
+		for id, data := range rows {
+			require.NoError(t, txn.Set(userRowKeyIn("mastodon", id), data))
+		}
+		require.NoError(t, txn.Commit())
+		putUsers(t, repo, domain.User{Id: "old@mastodon.social", Network: "mastodon"})
+
+		users, next, err := repo.WhoToFollow("mastodon", nil, nil)
+		require.NoError(t, err)
+		require.Empty(t, users)
+		require.Equal(t, "/USERS/USER/None/", next)
+
+		users, end, err := repo.WhoToFollow("mastodon", nil, &next)
+		require.NoError(t, err)
+		require.Equal(t, []string{"old@mastodon.social"}, idsOfUsers(users))
+		require.Equal(t, local_store.EndCursor, end)
+	})
+
+	t.Run("a root named like the start of another is not mixed in", func(t *testing.T) {
+		repo := newWhoToFollowRepo(t)
+		for _, u := range []domain.User{
+			{Id: "a@nostr.com", NodeId: "gateway", Network: "nostr"},
+			{Id: "b@nostrx.example", NodeId: "gateway", Network: "nostrx"},
+		} {
+			_, err := repo.Create(u)
+			require.NoError(t, err)
+		}
+		users, _, err := repo.WhoToFollow("nostr", nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, []string{"a@nostr.com"}, idsOfUsers(users))
+	})
+}

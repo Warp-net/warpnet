@@ -109,6 +109,10 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		return user, err
 	}
 
+	root := "None"
+	if user.Network != "" {
+		root = resolveNetwork(user)
+	}
 	if user.RoundTripTime == 0 {
 		user.RoundTripTime = defaultAverageRTT
 	}
@@ -132,7 +136,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 
 	sortableKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(root).
 		AddRange(rttRange).
 		AddParentId(user.Id).
 		Build()
@@ -443,8 +447,7 @@ func (repo *UserRepo) Delete(userId string) error {
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
-		Build()
+		Build() + local_store.Delimeter
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -487,8 +490,7 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
-		Build()
+		Build() + local_store.Delimeter
 
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
@@ -582,10 +584,20 @@ func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string)
 		want = min(*limit, local_store.MaxPageLimit)
 	}
 
-	prefix := local_store.NewPrefixBuilder(UsersRepoName).
-		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
-		Build()
+	from := ""
+	if cursor != nil {
+		from = *cursor
+	}
+	if from == local_store.EndCursor {
+		return []domain.User{}, local_store.EndCursor, nil
+	}
+
+	namespace := local_store.NewPrefixBuilder(UsersRepoName).AddSubPrefix(userSubNamespace)
+	legacy := namespace.AddRootID("None").Build() + local_store.Delimeter
+	prefixes := []local_store.DatabaseKey{legacy}
+	if network != "" && !strings.HasPrefix(from, legacy.String()) {
+		prefixes = []local_store.DatabaseKey{namespace.AddRootID(network).Build() + local_store.Delimeter, legacy}
+	}
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -593,41 +605,55 @@ func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string)
 	}
 	defer txn.Rollback()
 
-	from := ""
-	if cursor != nil {
-		from = *cursor
-	}
-	users := make([]domain.User, 0, want)
+	found := make([]domain.User, 0, want)
 	page := recommendedScanPage
-	for scanned := 0; scanned < maxRecommendedScan; {
-		c := from
-		items, next, err := txn.List(prefix, &page, &c)
-		if err != nil {
-			return nil, "", err
+	scanned := 0
+	for i, prefix := range prefixes {
+		if i > 0 {
+			from = ""
 		}
-		for i, item := range items {
-			scanned++
-			var u domain.User
-			if err := json.Unmarshal(item.Value, &u); err != nil {
+		for {
+			if scanned >= maxRecommendedScan {
+				if from == "" {
+					return found, prefix.String(), nil
+				}
+				return found, from, nil
+			}
+			c := from
+			items, next, err := txn.List(prefix, &page, &c)
+			if err != nil {
 				return nil, "", err
 			}
-			if u.IsOffline || resolveNetwork(u) != network {
-				continue
-			}
-			users = append(users, u)
-			if uint64(len(users)) >= want {
-				if i+1 < len(items) {
-					return users, items[i+1].Key, nil
+			for j, item := range items {
+				scanned++
+				var u domain.User
+				if err := json.Unmarshal(item.Value, &u); err != nil {
+					return nil, "", err
 				}
-				return users, next, nil
+				if u.IsOffline || resolveNetwork(u) != network {
+					continue
+				}
+				found = append(found, u)
+				if uint64(len(found)) < want {
+					continue
+				}
+				switch {
+				case j+1 < len(items):
+					return found, items[j+1].Key, nil
+				case next != "" && next != local_store.EndCursor:
+					return found, next, nil
+				case i+1 < len(prefixes):
+					return found, prefixes[i+1].String(), nil
+				}
+				return found, local_store.EndCursor, nil
 			}
+			if len(items) == 0 || next == "" || next == local_store.EndCursor {
+				break
+			}
+			from = next
 		}
-		if len(items) == 0 || next == "" || next == local_store.EndCursor {
-			return users, local_store.EndCursor, nil
-		}
-		from = next
 	}
-	return users, from, nil
+	return found, local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
