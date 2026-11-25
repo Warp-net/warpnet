@@ -112,7 +112,7 @@ func validateReport(ev event.ReportEvent) error {
 	}
 	// Runes, not bytes: a reason written in Cyrillic or carrying emoji costs
 	// two to four bytes per character, so a byte limit would cut it short of
-	// the 256 characters the UI offers.
+	// the 256 characters the UI composes.
 	if utf8.RuneCountInString(ev.Reason) > MaxReportReasonLen {
 		return ErrReportReasonLong
 	}

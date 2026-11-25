@@ -40,7 +40,7 @@
             :id="detailsId"
             v-model="details"
             rows="2"
-            maxlength="500"
+            :maxlength="detailsMaxLength"
             placeholder="Add any details that will help moderators."
             class="w-full rounded border border-lighter bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
           ></textarea>
@@ -78,6 +78,11 @@ const REPORT_CATEGORIES = [
   { label: "Dangerous or weapons", value: "Indiscriminate Weapons" },
 ];
 
+// The node refuses a reason longer than 256 characters (MaxReportReasonLen in
+// core/handler/report.go); UTF-16 length never undercounts its runes.
+const MAX_REASON_LENGTH = 256;
+const DETAIL_SEPARATOR = " — ";
+
 export default {
   name: "ReportDialog",
   props: {
@@ -104,13 +109,22 @@ export default {
     // The wire reason is the comma-joined list of the selected classes
     // (deduped — several friendly labels can map to the same class) with any
     // free-text detail appended, so moderators still see standardized labels.
+    classesReason() {
+      return [...new Set(this.selected.map((c) => c.value).filter(Boolean))].join(", ");
+    },
     composedReason() {
-      const classes = [...new Set(this.selected.map((c) => c.value).filter(Boolean))];
       const detail = this.details.trim();
-      return detail ? `${classes.join(", ")} — ${detail}` : classes.join(", ");
+      return detail ? `${this.classesReason}${DETAIL_SEPARATOR}${detail}` : this.classesReason;
+    },
+    detailsMaxLength() {
+      return MAX_REASON_LENGTH - this.classesReason.length - DETAIL_SEPARATOR.length;
     },
     canSubmit() {
-      return !this.submitting && this.selected.length > 0;
+      return (
+        !this.submitting &&
+        this.selected.length > 0 &&
+        this.composedReason.length <= MAX_REASON_LENGTH
+      );
     },
   },
   watch: {

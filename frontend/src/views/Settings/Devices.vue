@@ -22,8 +22,8 @@
         </p>
         <p class="text-sm text-dark mt-2">
           A removed device loses access at once and cannot pair itself back on its
-          own, whatever it still holds. Scanning this node's QR code on it again
-          pairs it as a new device.
+          own, whatever it still holds. To pair it back, restart Warpnet on this
+          computer and scan the new QR code on the device.
         </p>
         <!-- The mobile apps tint their toolbar monitor with these exact colours. -->
         <p class="text-sm text-dark mt-2">
@@ -125,7 +125,7 @@ export default {
     confirmMessage() {
       if (!this.pendingDevice) return '';
       return 'This device loses access to your node immediately. To pair it again, ' +
-        `scan this node's QR code on it once more.\n\n${this.pendingDevice.node_id}`;
+        `restart Warpnet and scan the new QR code on it.\n\n${this.pendingDevice.node_id}`;
     },
   },
   methods: {
