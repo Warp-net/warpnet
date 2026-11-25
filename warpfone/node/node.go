@@ -380,6 +380,13 @@ func (c *clientNode) dial(peerInfo string, isPaired bool) (peer.ID, error) {
 	}
 	if isPaired {
 		c.limiter.paired.Store(&peerID)
+		// A scope opened before pairing keeps the limits it was created with.
+		_ = c.host.Network().ResourceManager().ViewPeer(peerID, func(scope network.PeerScope) error {
+			if limited, ok := scope.(rcmgr.ResourceScopeLimiter); ok {
+				limited.SetLimit(c.limiter.GetPeerLimits(peerID))
+			}
+			return nil
+		})
 	}
 
 	// Peerstore is internally thread-safe and host.Connect can take 30s —
