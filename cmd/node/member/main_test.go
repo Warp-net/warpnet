@@ -44,6 +44,7 @@ func TestPreferExistingTestnet(t *testing.T) {
 		{
 			name: "testnet folder without a login",
 			prepare: func(t *testing.T, appPath string) {
+				t.Helper()
 				require.NoError(t, os.MkdirAll(filepath.Join(appPath, testNetwork, "storage", "v0"), 0o750))
 			},
 			wantNetwork: mainNetwork,
