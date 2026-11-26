@@ -15,6 +15,14 @@ esac
 
 echo "Pre-commit hook started..."
 
+# F-Droid rebuilds whenever warpdroid/fdroid/versionCode grows, so it moves only
+# when the commit touches the Android client (WARPDROID_BUMP=1 forces it, e.g.
+# for a core fix the embedded node needs).
+WARPDROID_CHANGED="${WARPDROID_BUMP:-}"
+if git diff --cached --name-only -- warpdroid fastlane ':!warpdroid/fdroid/versionCode' | grep -q .; then
+    WARPDROID_CHANGED=1
+fi
+
 CONFIG="version"
 SNAPCRAFT="snap/snapcraft.yaml"
 FRONTEND_PKG="frontend/package.json"
@@ -41,9 +49,8 @@ NEW_VERSION="$MAJOR.$MINOR.$PATCH"
 echo "Version: $CURRENT_VERSION -> $NEW_VERSION"
 
 # Backend: the single source of truth. Embedded into the binary (embedded.go),
-# load-bearing for the PSK derivation, and read by warpdroid/app/build.gradle,
-# which derives versionName/versionCode from it — so the Android client stays in
-# lockstep without a file of its own.
+# load-bearing for the PSK derivation, and read by warpdroid/app/build.gradle
+# as the APK versionName.
 sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
 git add "$CONFIG"
 
@@ -70,10 +77,10 @@ fi
 
 # Publish the F-Droid versionCode so fdroiddata's UpdateCheckMode: Tags can read
 # warpdroid/fdroid/versionCode at the tag. Single APK, no VercodeOperation:
-# code = major*1000000 + minor*10000 + patch, then *10 (no ABI offset), matching
-# warpdroid/app/build.gradle.
+# code = major*1000000 + minor*10000 + patch, then *10 (no ABI offset);
+# warpdroid/app/build.gradle reads it as the APK versionCode.
 NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
-if [ -f "$FDROID_VERSIONCODE" ]; then
+if [ -n "$WARPDROID_CHANGED" ] && [ -f "$FDROID_VERSIONCODE" ]; then
     echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
     git add "$FDROID_VERSIONCODE"
 fi
@@ -88,7 +95,7 @@ fi
 # versionCode. Single-APK model: F-Droid expects exactly one changelog file
 # named <versionCode>.txt. Carry the most recent note forward to the new name
 # and delete any others.
-if [ -d "$CHANGELOGS" ]; then
+if [ -n "$WARPDROID_CHANGED" ] && [ -d "$CHANGELOGS" ]; then
     NEW="$CHANGELOGS/$NEW_BASE.txt"
     LATEST=$(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V | tail -1 || true)
     if [ -n "$LATEST" ] && [ "$LATEST" != "$NEW" ]; then
