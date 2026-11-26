@@ -70,5 +70,15 @@ tag:
 	git tag -a "v0.8.127" -m "Release version 0.8.127" origin/main
 	git push origin "v0.8.127"
 
+# Moves the warpdroid versionCode (read by F-Droid) to the current `version`.
+# Run it only for releases that change warpdroid, then commit.
+warpdroid-version:
+	@code=$$(awk -F. '{print ($$1*1000000 + $$2*10000 + $$3) * 10}' version); \
+	old=$$(cat warpdroid/fdroid/versionCode); \
+	if [ "$$code" -le "$$old" ]; then echo "versionCode $$old is already >= $$code"; exit 1; fi; \
+	echo "$$code" > warpdroid/fdroid/versionCode; \
+	git add warpdroid/fdroid/versionCode; \
+	echo "warpdroid versionCode: $$old -> $$code"
+
 ios-dev-mode:
 	sudo ~/.local/share/pymobiledevice3/bin/pymobiledevice3 remote tunneld
