@@ -159,8 +159,18 @@ jobs:
             warpnet_windows_amd64_checksums.txt
 
 
-  sign:
+  release-warpdroid:
     needs: [release]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-warpdroid.yaml
+    with:
+      tag: ${{ github.event.inputs.tag }}
+    secrets: inherit
+
+
+  sign:
+    needs: [release, release-warpdroid]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -202,7 +212,7 @@ jobs:
 
 
   mirror-codeberg:
-    needs: [release, sign]
+    needs: [release, release-warpdroid, sign]
     runs-on: ubuntu-latest
 
     steps:

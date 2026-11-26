@@ -39,8 +39,8 @@ NEW_VERSION="$MAJOR.$MINOR.$PATCH"
 echo "Version: $CURRENT_VERSION -> $NEW_VERSION"
 
 # Backend: the single source of truth. Embedded into the binary (embedded.go),
-# load-bearing for the PSK derivation. warpdroid takes its version from the
-# warpdroid-vX.Y.Z release tag instead (.github/workflows/release-warpdroid.yaml).
+# load-bearing for the PSK derivation. The warpdroid versionCode is not bumped
+# here: `make warpdroid-version` moves it for releases that change warpdroid.
 sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
 git add "$CONFIG"
 

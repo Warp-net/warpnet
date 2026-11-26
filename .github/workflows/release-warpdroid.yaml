@@ -1,23 +1,24 @@
 name: Release warpdroid
 
-# Builds the warpdroid APK for a warpdroid-vX.Y.Z tag and attaches it to that
-# tag's Release. The tag is the Android version: versionName X.Y.Z, versionCode
-# derived from it by warpdroid/app/build.gradle. F-Droid watches the same tags,
-# so only these releases reach the store. The pipeline never commits and never
-# pushes tags.
+# Builds the warpdroid APK at an existing vX.Y.Z tag and attaches it to that
+# tag's Release. Called by release.yaml for every release: F-Droid builds the
+# newest tag whose warpdroid/fdroid/versionCode grew and compares its build with
+# this APK. The pipeline never commits and never pushes tags.
 on:
-  push:
-    tags:
-      - "warpdroid-v*"
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing warpdroid tag to release (e.g., warpdroid-v0.8.130)"
+        description: "Existing Git tag to release (e.g., v0.8.128)"
         required: true
         type: string
 
 env:
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ inputs.tag }}
 
 jobs:
   release:
@@ -30,15 +31,6 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           fetch-tags: true
-
-      - name: Derive version from the tag
-        run: |
-          set -euo pipefail
-          if ! [[ "$RELEASE_TAG" =~ ^warpdroid-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "::error::tag must be warpdroid-vMAJOR.MINOR.PATCH, got $RELEASE_TAG" >&2
-            exit 1
-          fi
-          echo "WARPDROID_VERSION=${RELEASE_TAG#warpdroid-v}" >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -114,7 +106,7 @@ jobs:
           WARPDROID_KEYSTORE_PASSWORD: ${{ secrets.WARPDROID_KEYSTORE_PASSWORD }}
           WARPDROID_KEY_ALIAS: ${{ secrets.WARPDROID_KEY_ALIAS }}
           WARPDROID_KEY_PASSWORD: ${{ secrets.WARPDROID_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease -PwarpdroidVersion="$WARPDROID_VERSION" --stacktrace
+        run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Locate APK + checksum
         working-directory: warpdroid
@@ -163,18 +155,13 @@ jobs:
           openssl pkeyutl -sign -inkey "$RUNNER_TEMP/release.key" -rawin \
             -in warpdroid_checksums.txt | base64 -w0 > warpdroid_checksums.txt.sig
 
-      - name: Publish APK to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Attach APK to the GitHub Release
+        working-directory: warpdroid
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_TAG }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # selfupdate of the desktop node reads releases/latest; an APK-only
-          # release must never become it.
-          make_latest: false
-          files: |
-            warpdroid/warpdroid.apk
-            warpdroid/warpdroid_checksums.txt
-            warpdroid/warpdroid_checksums.txt.sig
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Upload only: editing the release could move "latest", which desktop
+          # selfupdate reads.
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            warpdroid.apk warpdroid_checksums.txt warpdroid_checksums.txt.sig
