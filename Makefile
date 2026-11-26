@@ -67,11 +67,10 @@ copy-gguf:
 
 tag:
 	git fetch origin
-	git tag -a "v0.8.127" -m "Release version 0.8.127" origin/main
-	git push origin "v0.8.127"
+	git tag -a "v0.8.128" -m "Release version 0.8.128" origin/main
+	git push origin "v0.8.128"
 
-# Moves the warpdroid versionCode (read by F-Droid) to the current `version`.
-# Run it only for releases that change warpdroid, then commit.
+
 warpdroid-version:
 	@code=$$(awk -F. '{print ($$1*1000000 + $$2*10000 + $$3) * 10}' version); \
 	old=$$(cat warpdroid/fdroid/versionCode); \
