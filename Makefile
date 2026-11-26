@@ -67,8 +67,8 @@ copy-gguf:
 
 tag:
 	git fetch origin
-	git tag -a "v0.8.116" -m "Release version 0.8.116" origin/main
-	git push origin "v0.8.116"
+	git tag -a "v0.8.127" -m "Release version 0.8.127" origin/main
+	git push origin "v0.8.127"
 
 ios-dev-mode:
 	sudo ~/.local/share/pymobiledevice3/bin/pymobiledevice3 remote tunneld
