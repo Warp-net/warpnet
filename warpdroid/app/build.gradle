@@ -33,12 +33,17 @@ final def CUSTOM_INSTANCE = ""
 // Link shown on the About screen.
 final def SUPPORT_ACCOUNT_URL = "https://github.com/Warp-net/warpdroid"
 
-// versionName is the monorepo `version` file verbatim. versionCode comes from
-// warpdroid/fdroid/versionCode, which the pre-commit hook moves only when a
-// commit touches warpdroid, so F-Droid (UpdateCheckData reads that file) does
-// not rebuild for releases without Android changes.
-final def warpnetVersion = rootProject.file("../version").text.trim()
-final def warpdroidVersionCode = rootProject.file("fdroid/versionCode").text.trim().toInteger()
+// The Android version comes from the warpdroid release tag (warpdroid-vX.Y.Z):
+// the release workflow and F-Droid pass it as -PwarpdroidVersion. Local builds
+// fall back to the monorepo `version` file. versionName is the string verbatim;
+// versionCode is a monotonic integer with a decimal place reserved for a
+// per-ABI offset, which F-Droid requires to be unique per APK.
+final def warpnetVersion = (findProperty("warpdroidVersion") ?: rootProject.file("../version").text).trim()
+final def warpnetVersionParts = warpnetVersion.tokenize('.')
+final def warpnetBaseVersionCode =
+    warpnetVersionParts[0].toInteger() * 1_000_000 +
+    warpnetVersionParts[1].toInteger() * 10_000 +
+    warpnetVersionParts[2].toInteger()
 
 // Release signing is driven entirely by environment variables so no keystore or
 // secret ever lives in the repo. When they are absent (F-Droid's own build, or
@@ -61,7 +66,8 @@ android {
         applicationId = APP_ID
         minSdk = 24
         targetSdk = 36
-        versionCode = warpdroidVersionCode
+        // Published versionCode is baseVersionCode*10 (single APK, no ABI offset).
+        versionCode = warpnetBaseVersionCode * 10
         versionName = warpnetVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

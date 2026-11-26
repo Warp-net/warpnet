@@ -15,21 +15,11 @@ esac
 
 echo "Pre-commit hook started..."
 
-# F-Droid rebuilds whenever warpdroid/fdroid/versionCode grows, so it moves only
-# when the commit touches the Android client (WARPDROID_BUMP=1 forces it, e.g.
-# for a core fix the embedded node needs).
-WARPDROID_CHANGED="${WARPDROID_BUMP:-}"
-if git diff --cached --name-only -- warpdroid fastlane ':!warpdroid/fdroid/versionCode' | grep -q .; then
-    WARPDROID_CHANGED=1
-fi
-
 CONFIG="version"
 SNAPCRAFT="snap/snapcraft.yaml"
 FRONTEND_PKG="frontend/package.json"
 FRONTEND_LOCK="frontend/package-lock.json"
-FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
 WARPFONE_VERSION="warpfone/Version.xcconfig"
-CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
 
 if [ ! -f "$CONFIG" ]; then
     echo "Version file not found!"
@@ -49,8 +39,8 @@ NEW_VERSION="$MAJOR.$MINOR.$PATCH"
 echo "Version: $CURRENT_VERSION -> $NEW_VERSION"
 
 # Backend: the single source of truth. Embedded into the binary (embedded.go),
-# load-bearing for the PSK derivation, and read by warpdroid/app/build.gradle
-# as the APK versionName.
+# load-bearing for the PSK derivation. warpdroid takes its version from the
+# warpdroid-vX.Y.Z release tag instead (.github/workflows/release-warpdroid.yaml).
 sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
 git add "$CONFIG"
 
@@ -75,33 +65,11 @@ if [ -f "$FRONTEND_PKG" ]; then
     fi
 fi
 
-# Publish the F-Droid versionCode so fdroiddata's UpdateCheckMode: Tags can read
-# warpdroid/fdroid/versionCode at the tag. Single APK, no VercodeOperation:
-# code = major*1000000 + minor*10000 + patch, then *10 (no ABI offset);
-# warpdroid/app/build.gradle reads it as the APK versionCode.
+# iOS build number: major*1000000 + minor*10000 + patch, then *10.
 NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
-if [ -n "$WARPDROID_CHANGED" ] && [ -f "$FDROID_VERSIONCODE" ]; then
-    echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
-    git add "$FDROID_VERSIONCODE"
-fi
 
 # iOS client.
 if [ -f "$WARPFONE_VERSION" ]; then
     printf 'MARKETING_VERSION = %s\nCURRENT_PROJECT_VERSION = %s\n' "$NEW_VERSION" "$NEW_BASE" > "$WARPFONE_VERSION"
     git add "$WARPFONE_VERSION"
-fi
-
-# Keep the warpdroid F-Droid fastlane changelog in sync with the new
-# versionCode. Single-APK model: F-Droid expects exactly one changelog file
-# named <versionCode>.txt. Carry the most recent note forward to the new name
-# and delete any others.
-if [ -n "$WARPDROID_CHANGED" ] && [ -d "$CHANGELOGS" ]; then
-    NEW="$CHANGELOGS/$NEW_BASE.txt"
-    LATEST=$(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V | tail -1 || true)
-    if [ -n "$LATEST" ] && [ "$LATEST" != "$NEW" ]; then
-        mv -f "$LATEST" "$NEW"
-        echo "Changelog: $(basename "$LATEST") -> $(basename "$NEW")"
-    fi
-    find "$CHANGELOGS" -maxdepth 1 -name '*.txt' ! -name "$NEW_BASE.txt" -exec rm -f {} +
-    git add -A "$CHANGELOGS"
 fi
