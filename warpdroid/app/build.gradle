@@ -33,13 +33,12 @@ final def CUSTOM_INSTANCE = ""
 // Link shown on the About screen.
 final def SUPPORT_ACCOUNT_URL = "https://github.com/Warp-net/warpdroid"
 
-// The Android version is derived from the monorepo `version` file at the repo
-// root so the client stays in lockstep with the node/backend release. It is
-// strict MAJOR.MINOR.PATCH semver (also load-bearing for the Go PSK
-// derivation), e.g. "0.7.454". versionName is the string verbatim; versionCode
-// is a monotonic integer with a decimal place reserved for a per-ABI offset
-// (see applicationVariants below), which F-Droid requires to be unique per APK.
-final def warpnetVersion = rootProject.file("../version").text.trim()
+// The Android version comes from the warpdroid release tag (warpdroid-vX.Y.Z):
+// the release workflow and F-Droid pass it as -PwarpdroidVersion. Local builds
+// fall back to the monorepo `version` file. versionName is the string verbatim;
+// versionCode is a monotonic integer with a decimal place reserved for a
+// per-ABI offset, which F-Droid requires to be unique per APK.
+final def warpnetVersion = (findProperty("warpdroidVersion") ?: rootProject.file("../version").text).trim()
 final def warpnetVersionParts = warpnetVersion.tokenize('.')
 final def warpnetBaseVersionCode =
     warpnetVersionParts[0].toInteger() * 1_000_000 +
