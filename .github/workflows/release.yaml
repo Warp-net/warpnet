@@ -386,9 +386,3 @@ jobs:
             exit 1
           fi
           echo "Codeberg now serves $published"
-
-  release-warpfone:
-    uses: ./.github/workflows/release-warpfone.yaml
-    with:
-      tag: ${{ github.event.inputs.tag }}
-    secrets: inherit

@@ -55,6 +55,7 @@ type AppAuthServicer interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error)
 	AuthLogout()
 	Reset()
+	IsAuthenticated() bool
 	PrivateKey() ed25519.PrivateKey
 	Storage() auth.AuthPersistencyLayer
 }
@@ -359,6 +360,10 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 
 	switch request.Path {
 	case event.PRIVATE_POST_LOGIN:
+		if a.auth.IsAuthenticated() {
+			response.Body = newErrorResp("already authenticated")
+			return response
+		}
 		var ev event.LoginEvent
 		err := json.Unmarshal(request.Body, &ev)
 		if err != nil {

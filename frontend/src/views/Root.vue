@@ -335,22 +335,6 @@ resulting from the use or misuse of this software.
               <p class="text-2xl font-bold">Create your account</p>
             </div>
 
-            <fieldset class="mb-6">
-              <legend class="font-bold mb-2">Show your posts on Nostr?</legend>
-              <p class="text-sm text-dark mb-3">
-                Nostr is another open network. Unless you opt out, your public posts, replies,
-                reactions and follows also appear there. You can't change this later.
-              </p>
-              <label class="flex items-center mb-2 cursor-pointer">
-                <input v-model="nostrConsent" type="radio" value="allow" class="mr-2" />
-                Allow
-              </label>
-              <label class="flex items-center cursor-pointer">
-                <input v-model="nostrConsent" type="radio" value="deny" class="mr-2" />
-                Don't allow
-              </label>
-            </fieldset>
-
             <p>
               By signing up, you agree to our
               <a href="https://warpnet.site/legal-doc" target="_blank" rel="noopener" class="text-blue">Terms and Privacy Policy</a>.
@@ -405,7 +389,6 @@ export default {
       contentDistribution: false,
       futureAds: false,
       localStorageLoss: false,
-      nostrConsent: "allow",
       signUpError: "",
       firstRunError: false,
       firstRunErrorMessage: "",
@@ -482,13 +465,6 @@ export default {
           username: this.username,
           password: this.password,
         });
-        if (this.nostrConsent === "deny") {
-          try {
-            await warpnetService.denyNostr();
-          } catch (err) {
-            console.error("failed to save the Nostr opt-out:", err);
-          }
-        }
         this.setStep("");
         queueOnboarding();
         // No Vue route by id — route via Search (same as SearchBar).

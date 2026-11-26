@@ -4,7 +4,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 vi.mock('@/service/service', () => ({
   warpnetService: {
     signInUser: vi.fn(),
-    denyNostr: vi.fn(),
     isFirstRun: vi.fn(),
     consumePendingDeepLink: vi.fn(),
     isDesktopNode: vi.fn(),
@@ -58,8 +57,6 @@ beforeEach(() => {
   routerReplace.mockClear();
   warpnetService.resumeSession.mockResolvedValue(false);
   warpnetService.signInUser.mockResolvedValue(undefined);
-  warpnetService.denyNostr.mockReset();
-  warpnetService.denyNostr.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
   warpnetService.consumePendingDeepLink.mockResolvedValue("");
   warpnetService.isDesktopNode.mockReturnValue(true);
@@ -164,7 +161,6 @@ describe('Root.vue', () => {
     // Step 4: final Sign up (two "Sign up" buttons exist now — the landing one
     // and the modal one; the latter appears after the flow reaches step 4).
     await screen.findByText(/Step 4 of 4/i);
-    await fireEvent.click(screen.getByLabelText(/Don't allow/));
     const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
 
@@ -231,7 +227,6 @@ describe('Root.vue', () => {
 
     // Step 4
     await screen.findByText(/Step 4 of 4/i);
-    await fireEvent.click(screen.getByLabelText(/Don't allow/));
     const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
 
@@ -270,7 +265,7 @@ describe('Root.vue', () => {
   //
   // Drive the modal sign-up to the final step so we exercise the
   // real signMeUp() handler.
-  const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD, nostr = '' } = {}) => {
+  const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD } = {}) => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
@@ -286,36 +281,9 @@ describe('Root.vue', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     await screen.findByText(/Step 4 of 4/i);
-    if (nostr) await fireEvent.click(screen.getByLabelText(nostr === 'allow' ? /^Allow$/ : /Don't allow/));
     const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
   };
-
-  it('shows the posts on Nostr by default', async () => {
-    renderRoot({ firstRun: true });
-    await completeSignUp();
-
-    await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
-    expect(warpnetService.denyNostr).not.toHaveBeenCalled();
-  });
-
-  it('saves the Nostr opt-out after sign-up', async () => {
-    renderRoot({ firstRun: true });
-    await completeSignUp({ nostr: 'deny' });
-
-    await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
-    expect(warpnetService.denyNostr).toHaveBeenCalledTimes(1);
-    expect(warpnetService.signInUser.mock.invocationCallOrder[0])
-      .toBeLessThan(warpnetService.denyNostr.mock.invocationCallOrder[0]);
-  });
-
-  it('still signs in when saving the Nostr opt-out fails', async () => {
-    warpnetService.denyNostr.mockRejectedValueOnce(new Error('node busy'));
-    renderRoot({ firstRun: true });
-    await completeSignUp({ nostr: 'deny' });
-
-    await waitFor(() => expect(routerPush).toHaveBeenCalledWith({ name: 'Home' }));
-  });
 
   it('does not auto-open the pairing QR after a first-run signup', async () => {
     renderRoot({ firstRun: true });

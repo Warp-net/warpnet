@@ -69,9 +69,9 @@ services:
 
 
 
-  vadim-testnet:
-    container_name: vadim-testnet
-    image: ghcr.io/warp-net/warpnet-vadim:latest
+  demo:
+    container_name: demo-testnet
+    image: ghcr.io/warp-net/warpnet-demo:latest
     network_mode: host
     restart: unless-stopped
     mem_limit: 512m
@@ -86,7 +86,7 @@ services:
       - NODE_SERVER_PORT=4999
       - GOMEMLIMIT=384MiB
     volumes:
-      - /root/.warpdata-vadim:/root/.warpdata:rw
+      - /root/.warpdata-demo:/root/.warpdata:rw
 
   echo:
     container_name: echo-testnet

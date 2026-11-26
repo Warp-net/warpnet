@@ -163,14 +163,14 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 	t.Run("profile lookup failure falls back to the owner", func(t *testing.T) {
 		users := stubUserFetcher{
 			getFn: func(string) (domain.User, error) { return domain.User{}, errors.New("down") },
-			whoToFollowFn: func(*uint64, *string) ([]domain.User, string, error) {
+			whoToFollowFn: func(string, *uint64, *string) ([]domain.User, string, error) {
 				return []domain.User{{Id: "cand-1", NodeId: "far-node", Network: warpnet.WarpnetName}}, "", nil
 			},
 		}
 		out, err := StreamGetWhoToFollowHandler(auth, users, stubUserFollowsCounter{}, stubUserStreamer{})(
 			marshal(t, event.GetAllUsersEvent{UserId: ownerId}), nil)
 		require.NoError(t, err)
-		require.Len(t, out.(event.UsersResponse).Users, 1)
+		require.Len(t, out.(event.WhoToFollowResponse).Users, 1)
 	})
 
 	t.Run("filters offline, self, followed and cross-network candidates", func(t *testing.T) {
@@ -181,7 +181,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 			getFn: func(id string) (domain.User, error) {
 				return domain.User{Id: id, Network: warpnet.WarpnetName}, nil
 			},
-			whoToFollowFn: func(*uint64, *string) ([]domain.User, string, error) {
+			whoToFollowFn: func(string, *uint64, *string) ([]domain.User, string, error) {
 				return []domain.User{
 					{Id: "offline", NodeId: "n1", Network: warpnet.WarpnetName, IsOffline: true},
 					{Id: ownerId, NodeId: "own-node", Network: warpnet.WarpnetName},
@@ -200,7 +200,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 			marshal(t, event.GetAllUsersEvent{UserId: ownerId}), nil)
 		require.NoError(t, err)
 
-		resp := out.(event.UsersResponse)
+		resp := out.(event.WhoToFollowResponse)
 		ids := make([]string, 0, len(resp.Users))
 		for _, u := range resp.Users {
 			ids = append(ids, u.Id)
@@ -219,13 +219,13 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 			getFn: func(id string) (domain.User, error) {
 				return domain.User{Id: id, Network: bridge.MastodonNetwork}, nil
 			},
-			whoToFollowFn: func(*uint64, *string) ([]domain.User, string, error) {
+			whoToFollowFn: func(string, *uint64, *string) ([]domain.User, string, error) {
 				return []domain.User{{Id: "warp-1", NodeId: "n1", Network: warpnet.WarpnetName}}, "", nil
 			},
 		}
 		out, err := StreamGetWhoToFollowHandler(auth, users, stubUserFollowsCounter{}, stubUserStreamer{})(
 			marshal(t, event.GetAllUsersEvent{UserId: "someone-else"}), nil)
 		require.NoError(t, err)
-		require.Empty(t, out.(event.UsersResponse).Users)
+		require.Empty(t, out.(event.WhoToFollowResponse).Users)
 	})
 }

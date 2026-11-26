@@ -51,10 +51,6 @@ func (e authError) Error() string {
 	return string(e)
 }
 
-const (
-	errAlreadyAuthenticated authError = "already authenticated"
-)
-
 // defaultUsername is the public name of a new profile: the login is half of the
 // database and identity key secret, so it never becomes the profile name.
 const defaultUsername = "Anonymous"
@@ -109,11 +105,6 @@ func (as *AuthService) IsAuthenticated() bool {
 }
 
 func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error) {
-	if as.isAuthenticated.Load() {
-		log.Error("auth: already authenticated")
-		return authInfo, errAlreadyAuthenticated
-	}
-
 	log.Infoln("authenticating user")
 
 	message.Password = strings.TrimSpace(message.Password)
@@ -148,7 +139,6 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		user, err = as.userPersistence.Create(domain.User{
 			CreatedAt:     owner.CreatedAt,
 			Id:            id,
-			NodeId:        "none",
 			Username:      defaultUsername,
 			RoundTripTime: math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
@@ -225,10 +215,7 @@ func (as *AuthService) AuthLogout() {
 	as.authPersistence.Logout()
 }
 
-// Reset clears the authenticated guard so the same process can log in again
-// after a logout. The remote node keeps its node running and reopens the
-// database on the next login; the member app stops its node and raises a new
-// one, so both call this once the logout has gone through.
+// Reset clears the authenticated flag once the member app has logged out.
 func (as *AuthService) Reset() {
 	as.isAuthenticated.Store(false)
 }

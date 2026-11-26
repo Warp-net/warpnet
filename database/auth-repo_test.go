@@ -70,6 +70,11 @@ func (s *AuthRepoTestSuite) TestAuthenticate_InvalidCredentials() {
 	assert.Error(s.T(), err)
 }
 
+func (s *AuthRepoTestSuite) TestAuthenticate_OpenStoreChecksPassword() {
+	assert.ErrorIs(s.T(), s.repo.Authenticate("test", "wrong"), local_store.ErrWrongPassword)
+	assert.NoError(s.T(), s.repo.Authenticate("test", "test"))
+}
+
 func (s *AuthRepoTestSuite) TestAuthenticate_DBNotInitialized() {
 	var repo = &AuthRepo{}
 	err := repo.Authenticate("test", "test")

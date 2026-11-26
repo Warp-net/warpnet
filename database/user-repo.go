@@ -44,9 +44,17 @@ import (
 	"github.com/Warp-net/warpnet/json"
 )
 
+var networkNamespaces = map[string]string{
+	warpnet.WarpnetName:    warpnetNamespace,
+	bridge.MastodonNetwork: mastodonNamespace,
+	bridge.ThreadsNetwork:  threadsNamespace,
+	bridge.NostrNetwork:    nostrNamespace,
+}
+
 var (
 	ErrUserNotFound      = local_store.DBError("user not found")
 	ErrUserAlreadyExists = local_store.DBError("user already exists")
+	ErrUserOfAnotherNode = local_store.DBError("user is bound to another node")
 	ErrConflict          = local_store.ErrConflict
 )
 
@@ -54,6 +62,12 @@ const (
 	UsersRepoName    = "/USERS"
 	userSubNamespace = "USER"
 	nodeSubNamespace = "NODE"
+
+	noneNamespace     = "None"
+	warpnetNamespace  = warpnet.WarpnetName + "/"
+	mastodonNamespace = bridge.MastodonNetwork + "/"
+	threadsNamespace  = bridge.ThreadsNetwork + "/"
+	nostrNamespace    = bridge.NostrNetwork + "/"
 
 	defaultAverageRTT int64 = 125000
 
@@ -108,6 +122,11 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 		return user, err
 	}
 
+	network := resolveNetwork(user)
+	root, ok := networkNamespaces[network]
+	if !ok || user.Network == "" {
+		root = noneNamespace
+	}
 	if user.RoundTripTime == 0 {
 		user.RoundTripTime = defaultAverageRTT
 	}
@@ -119,7 +138,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(user.Id).
 		Build()
@@ -131,7 +150,7 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 
 	sortableKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(root).
 		AddRange(rttRange).
 		AddParentId(user.Id).
 		Build()
@@ -194,7 +213,7 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -221,6 +240,16 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	err = json.Unmarshal(data, &existingUser)
 	if err != nil {
 		return existingUser, err
+	}
+	oldNetwork := resolveNetwork(existingUser)
+	oldRoot, ok := networkNamespaces[oldNetwork]
+	if !ok || existingUser.Network == "" {
+		oldRoot = noneNamespace
+	}
+	// A user id is not bound to a key, so any node can claim one: the node a
+	// user was first bound to keeps it.
+	if newUser.NodeId != "" && existingUser.NodeId != "" && newUser.NodeId != existingUser.NodeId {
+		return existingUser, ErrUserOfAnotherNode
 	}
 
 	if newUser.Birthdate != "" {
@@ -294,6 +323,28 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if err != nil {
 		return existingUser, err
 	}
+	network := resolveNetwork(existingUser)
+	root, ok := networkNamespaces[network]
+	if !ok || existingUser.Network == "" {
+		root = noneNamespace
+	}
+	isMoved := root != oldRoot
+	if isMoved {
+		rtt := existingUser.RoundTripTime
+		if rtt == 0 {
+			rtt = defaultAverageRTT
+		}
+		movedKey := local_store.NewPrefixBuilder(UsersRepoName).
+			AddSubPrefix(userSubNamespace).
+			AddRootID(root).
+			AddRange(local_store.RangePrefix(strconv.FormatInt(rtt, 10))).
+			AddParentId(userId).
+			Build()
+		if err = txn.Delete(local_store.DatabaseKey(sortableKeyBytes)); err != nil {
+			return existingUser, err
+		}
+		sortableKeyBytes = movedKey.Bytes()
+	}
 	if err = txn.Set(fixedKey, sortableKeyBytes); err != nil {
 		return existingUser, err
 	}
@@ -301,10 +352,10 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		return existingUser, err
 	}
 
-	if newUser.NodeId != "" {
+	if existingUser.NodeId != "" && (newUser.NodeId != "" || isMoved) {
 		nodeUserKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(nodeSubNamespace).
-			AddRootID(newUser.NodeId).
+			AddRootID(existingUser.NodeId).
 			Build()
 		if err = txn.Set(nodeUserKey, sortableKeyBytes); err != nil {
 			return existingUser, err
@@ -320,7 +371,7 @@ func (repo *UserRepo) Get(userId string) (user domain.User, err error) {
 	}
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -385,7 +436,7 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 func (repo *UserRepo) Delete(userId string) error {
 	fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
+		AddRootID(noneNamespace).
 		AddRange(local_store.FixedRangeKey).
 		AddParentId(userId).
 		Build()
@@ -437,7 +488,6 @@ func (repo *UserRepo) Delete(userId string) error {
 func (repo *UserRepo) List(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
 		Build()
 
 	txn, err := repo.db.NewTxn()
@@ -481,7 +531,6 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).
 		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
 		Build()
 
 	want := uint64(20)
@@ -561,115 +610,37 @@ const (
 // resolveNetwork works out which network a user is on. Rows written before the
 // network tag existed carry none; a ULID id is what marks those as Warpnet.
 func resolveNetwork(u domain.User) string {
-	if u.Network != "" {
+	if u.Network != "" && bridge.IsBridged(u.Network) {
 		return u.Network
 	}
-	if isULID(u.Id) {
+	if u.Network != "" || isULID(u.Id) {
 		return warpnet.WarpnetName
 	}
 	return ""
 }
 
-// usersByNetwork groups scanned users by network, networks in first-seen order.
-// Without the grouping the network with the most rows takes every slot.
-type usersByNetwork struct {
-	users      map[string][]domain.User
-	networks   []string
-	perNetwork uint64 // cap per group; more than a block can never be shown
-}
-
-func newUsersByNetwork(perNetwork uint64) *usersByNetwork {
-	return &usersByNetwork{
-		users:      map[string][]domain.User{},
-		networks:   make([]string, 0, 2),
-		perNetwork: perNetwork,
-	}
-}
-
-func (g *usersByNetwork) append(u domain.User) {
-	network := resolveNetwork(u)
-	if _, seen := g.users[network]; !seen {
-		g.networks = append(g.networks, network)
-	}
-	if uint64(len(g.users[network])) < g.perNetwork {
-		g.users[network] = append(g.users[network], u)
-	}
-}
-
-// spreadEvenly hands out up to limit users, one network at a time in rotation.
-// A network that runs out drops out, so one network alone still fills the block.
-func (g *usersByNetwork) spreadEvenly(limit uint64) []domain.User {
-	out := make([]domain.User, 0, limit)
-	for round := 0; uint64(len(out)) < limit; round++ {
-		placed := false
-		for _, network := range g.networks {
-			group := g.users[network]
-			if round >= len(group) {
-				continue
-			}
-			out = append(out, group[round])
-			placed = true
-			if uint64(len(out)) >= limit {
-				return out
-			}
-		}
-		if !placed {
-			return out // every network exhausted
-		}
-	}
-	return out
-}
-
-// scanUsersByNetwork walks the keyspace from cursor and groups what it finds. It
-// does not stop once it has enough users: a network's only account can sit
-// anywhere in the keyspace.
-func scanUsersByNetwork(
-	txn local_store.WarpTransactioner,
-	prefix local_store.DatabaseKey,
-	perNetwork uint64,
-	cursor string,
-) (*usersByNetwork, error) {
-	groups := newUsersByNetwork(perNetwork)
-	page := recommendedScanPage
-	scanned := 0
-
-	for scanned < maxRecommendedScan {
-		from := cursor
-		items, next, err := txn.List(prefix, &page, &from)
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range items {
-			scanned++
-			var u domain.User
-			if err := json.Unmarshal(item.Value, &u); err != nil {
-				return nil, err
-			}
-			if u.IsOffline {
-				continue
-			}
-			groups.append(u)
-		}
-		if len(items) == 0 || next == "" || next == local_store.EndCursor {
-			break
-		}
-		cursor = next
-	}
-	return groups, nil
-}
-
-// WhoToFollow returns an even share of every network the node knows users on.
-// It is one page, so the returned cursor is always the end.
-func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
+func (repo *UserRepo) WhoToFollow(network string, limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
 		want = min(*limit, local_store.MaxPageLimit)
 	}
+	from := ""
+	if cursor != nil {
+		from = *cursor
+	}
 
-	prefix := local_store.NewPrefixBuilder(UsersRepoName).
-		AddSubPrefix(userSubNamespace).
-		AddRootID("None").
-		Build()
+	users := local_store.NewPrefixBuilder(UsersRepoName).
+		AddSubPrefix(userSubNamespace)
+	none := users.AddRootID(noneNamespace).Build()
+	roots := []local_store.DatabaseKey{none}
+	own, ok := networkNamespaces[network]
+	switch {
+	case from == local_store.EndCursor:
+		roots = nil
+	case ok && !strings.HasPrefix(from, none.String()):
+		ownRoot := users.AddRootID(own).Build()
+		roots = []local_store.DatabaseKey{ownRoot, none}
+	}
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -677,15 +648,41 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 	}
 	defer txn.Rollback()
 
-	from := ""
-	if cursor != nil {
-		from = *cursor
+	found := make([]domain.User, 0, want)
+	page := recommendedScanPage
+	scanned := 0
+	for i, root := range roots {
+		if i > 0 {
+			from = root.String()
+		}
+		for {
+			if scanned >= maxRecommendedScan {
+				return found, from, nil
+			}
+			items, next, err := txn.List(root, &page, &from)
+			if err != nil {
+				return nil, "", err
+			}
+			for _, item := range items {
+				if uint64(len(found)) == want {
+					return found, item.Key, nil
+				}
+				scanned++
+				var u domain.User
+				if err := json.Unmarshal(item.Value, &u); err != nil {
+					return nil, "", err
+				}
+				if !u.IsOffline && resolveNetwork(u) == network {
+					found = append(found, u)
+				}
+			}
+			if next == local_store.EndCursor {
+				break
+			}
+			from = next
+		}
 	}
-	groups, err := scanUsersByNetwork(txn, prefix, want, from)
-	if err != nil {
-		return nil, "", err
-	}
-	return groups.spreadEvenly(want), local_store.EndCursor, nil
+	return found, local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
@@ -704,7 +701,7 @@ func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err erro
 	for _, userID := range userIDs {
 		fixedKey := local_store.NewPrefixBuilder(UsersRepoName).
 			AddSubPrefix(userSubNamespace).
-			AddRootID("None").
+			AddRootID(noneNamespace).
 			AddRange(local_store.FixedRangeKey).
 			AddParentId(userID).
 			Build()

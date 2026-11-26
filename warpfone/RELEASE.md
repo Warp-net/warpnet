@@ -8,8 +8,8 @@ to App Store Connect, from where the build goes to TestFlight. It does not
 change the version; tag a commit whose `Version.xcconfig` carries the version
 to ship. Each upload needs a build number App Store Connect has not seen, and
 `CURRENT_PROJECT_VERSION` follows the version file, so every version can be
-uploaded once. The `Release` workflow calls it for every release, so the iOS
-app ships with the desktop and Android builds; it can also be run alone.
+uploaded once. It is not part of the `Release` workflow: most releases don't
+touch warpfone, so run it by hand with the tag to ship to TestFlight.
 
 The workflow reads these repository secrets:
 
@@ -57,22 +57,48 @@ of approved encryption documentation.
 
 ## App Review
 
-There is no demo node or demo account: the app only pairs with the user's own
-node, so reviewers get past the pairing screen no further. Leave "Sign-in
-required" off in Beta App Review Information and App Review Information, and
-explain this in the notes:
+Reviewers pair the app with a demo node: a remote node (`Dockerfile.remote`)
+on testnet, signed in to a demo account that follows a few accounts and has
+posts and a chat, so the timeline, notifications and messages are not empty.
+
+The remote node takes one dashboard login per process: a second browser gets
+"already authenticated", and signing out closes the database, which cuts off
+every paired device. So reviewers get pairing data, never the dashboard login:
+
+1. Sign in to the demo node's dashboard once and stay signed in until the
+   review ends.
+2. Open the menu → "Sign in by QR-code", take a screenshot of the QR code and
+   press "Copy connection data".
+3. In Beta App Review Information and App Review Information, leave "Sign-in
+   required" off, attach the screenshot and put the connection data into the
+   notes below.
+
+The pairing token lives in the node's memory: a restart replaces it and signs
+the node out. Do not restart or sign out of the demo node while a build is in
+review. If it restarts, sign in again and send the new QR code and connection
+data in the Resolution Center. Several devices can pair with the same data.
+
+Notes:
 
 > Warpnet is a peer-to-peer network with no central server and no accounts
 > held by us. The iOS app is a companion for the user's own Warpnet node
-> running on their computer; it pairs with that node by scanning its QR code.
-> There is no hosted service we could provide a demo account for.
+> running on their computer. For the review we run a demo node. To pair with
+> it:
+>
+> 1. Point the camera at the attached QR code, or tap "Enter pairing data
+>    manually", paste the connection data below and tap "Pair".
+> 2. Read the content rules, turn on "I agree" and tap "Connect".
+>
+> Connection data: <connection data>
+>
+> Moderation: posts and profiles can be reported, and reports go to the
+> network's moderators. Accounts can be blocked from their profiles. Before
+> pairing, users agree to terms with zero tolerance for objectionable content
+> and abusive users.
 
-If the review is rejected under guideline 2.1 for a missing demo account,
-answer in the Resolution Center with the same text.
-
-The notes should also say where moderation happens (reports go to the
-network's moderators, accounts can be blocked from their profiles), since
-guideline 1.2 asks apps with user-generated content to offer both.
+If the review is rejected under guideline 2.1 because pairing fails, check
+that the demo node is up and signed in, and answer in the Resolution Center
+with fresh connection data.
 
 The app bundles the AGPL-3.0 node, and Apple's standard EULA adds usage
 restrictions the AGPL forbids, so App Information sets a custom license

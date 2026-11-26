@@ -134,7 +134,7 @@ func TestPairedNodeIsNotLimited(t *testing.T) {
 	bootstrapAddr, stranger := newPeer()
 	pairedAddr, paired := newPeer()
 
-	cn, err := newClient(freshKey(t), psk, "testnet", []string{bootstrapAddr})
+	cn, err := newClient(freshKey(t), psk, "testnet", []string{bootstrapAddr, pairedAddr})
 	if err != nil {
 		t.Fatalf("newClient: %v", err)
 	}

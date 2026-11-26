@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
+    isUnfamiliar: vi.fn(() => Promise.resolve(false)),
+    acceptChat: vi.fn(),
+    circleFirst: vi.fn((users) => Promise.resolve(users || [])),
     searchUsers: vi.fn(),
     getImage: vi.fn(),
     getGatewaySettings: vi.fn(),
@@ -127,6 +130,23 @@ describe('Search.vue', () => {
       await screen.findByText('Bobby', undefined, { timeout: 3000 })
     ).toBeInTheDocument();
     expect(screen.getByText('Caroline')).toBeInTheDocument();
+  });
+
+  it('lists people in the circle first', async () => {
+    warpnetService.searchUsers.mockResolvedValue({
+      users: [
+        { id: 'bob', username: 'Bobby' },
+        { id: 'carol', username: 'Caroline' },
+      ],
+      cursor: 'end',
+    });
+    warpnetService.circleFirst.mockImplementationOnce((users) => Promise.resolve([...users].reverse()));
+
+    renderSearch({ query: { q: 'bo' } });
+
+    await screen.findByText('Caroline');
+    const names = screen.getAllByRole('listitem').map((li) => li.textContent);
+    expect(names).toEqual(['Caroline', 'Bobby']);
   });
 
   it('renders with an empty input when no route query is provided (edge case)', () => {

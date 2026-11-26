@@ -41,6 +41,18 @@
             </span>
           </span>
         </label>
+        <label class="flex items-start">
+          <input type="checkbox" v-model="prefs.strangerMedia" class="mr-2 mt-1" />
+          <span>
+            <span class="font-bold">Show media from unfamiliar authors</span>
+            <span class="block text-sm text-dark">
+              Images and videos from people outside your circle wait for a
+              tap and are not downloaded until then. Your circle is who you
+              follow and the mutuals of your mutual follows. Stored on this
+              device only.
+            </span>
+          </span>
+        </label>
         <label class="block">
           <span class="font-bold">Default language</span>
           <input
@@ -89,7 +101,7 @@ export default {
       savedMessage: '',
       saveError: false,
       ownerProfile: {},
-      prefs: { privacy: 'public', sensitive: false, language: 'en', dataSaver: false },
+      prefs: { privacy: 'public', sensitive: false, language: 'en', dataSaver: false, strangerMedia: false },
     };
   },
   methods: {
@@ -98,6 +110,7 @@ export default {
       this.savedMessage = '';
       this.saveError = false;
       try {
+        warpnetService.cacheStrangerMediaShown(this.prefs.strangerMedia);
         await warpnetService.updateAccountSource(this.prefs);
         this.savedMessage = 'Saved';
       } catch (err) {
@@ -117,6 +130,7 @@ export default {
   },
   async created() {
     this.ownerProfile = warpnetService.getOwnerProfile();
+    this.prefs.strangerMedia = warpnetService.isStrangerMediaShown();
     try {
       const profile = await warpnetService.getProfile(this.ownerProfile?.user_id);
       const meta = profile?.metadata;

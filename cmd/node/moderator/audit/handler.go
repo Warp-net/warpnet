@@ -36,9 +36,8 @@ func NewResponseSigner(privKey ed25519.PrivateKey, selfID domain.ID, model domai
 }
 
 // StreamChallengeHandler answers audit spot-checks: run the local engine on
-// exactly the challenged text and return a signed verdict. NOT REGISTERED
-// anywhere yet — wiring it under ChallengeRoute on
-// the moderator node is the integration step.
+// exactly the challenged text and return a signed verdict. The moderator node
+// registers it under ChallengeRoute once its engine is up.
 func StreamChallengeHandler(engine Engine, sign ResponseSigner) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ch Challenge

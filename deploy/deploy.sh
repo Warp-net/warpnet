@@ -49,13 +49,13 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u filinvadim --password-stdin
 docker pull ghcr.io/warp-net/warpnet-relay:"$WARPNET_VERSION"
 docker pull ghcr.io/warp-net/warpnet-moderator:latest
 docker pull ghcr.io/warp-net/warpnet-echo:latest
-docker pull ghcr.io/warp-net/warpnet-vadim:latest
+docker pull ghcr.io/warp-net/warpnet-demo:latest
 
 export HOSTNAME=''
 
 mkdir -p /root/testnet
 mv docker-compose-testnet.yml testnet/docker-compose-testnet.yml
-docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down
+docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down --remove-orphans
 docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --build
 
 docker image prune --force

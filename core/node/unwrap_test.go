@@ -51,7 +51,7 @@ import (
 const testProto = warpnet.WarpProtocolID("/public/post/tweet/0.0.0")
 
 func unwrapHandler(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
-	return (&WarpNode{}).unwrap(handler)
+	return (&WarpNode{isClosed: new(atomic.Bool)}).unwrap(handler)
 }
 
 func streamRequest(
