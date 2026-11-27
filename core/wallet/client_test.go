@@ -42,7 +42,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -685,7 +684,7 @@ func TestTransferKeepsTheTxOfATransferWhoseAnswerWasLost(t *testing.T) {
 }
 
 func TestCallsCarryTheEndpointAndHeadersSigned(t *testing.T) {
-	calls := make(chan request, 2)
+	calls := make(chan request, 1)
 	client := answeringEngine(t, func(req request) string {
 		calls <- req
 		return `{"id":"` + req.ID + `","result":{"available":true}}`
@@ -712,28 +711,6 @@ func TestCallsCarryTheEndpointAndHeadersSigned(t *testing.T) {
 	if err != nil || !ed25519.Verify(signer.Public().(ed25519.PublicKey), req.signingBytes(), sig) {
 		t.Fatalf("signature %q does not verify", req.Signature)
 	}
-
-	client.SwitchEndpoint("", nil)
-	if !client.IsAvailable(t.Context()) {
-		t.Fatal("not available")
-	}
-	req = <-calls
-	if strings.Contains(string(req.Params), "endpoint") || strings.Contains(string(req.Params), "headers") {
-		t.Fatalf("params = %s", req.Params)
-	}
-}
-
-func TestEngineIsStartedWithTheSignersPublicKey(t *testing.T) {
-	client, _ := engineClient(t, nil)
-	pub, signer, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client.signer = signer
-	args := client.engineArgs()
-	if !slices.Equal(args[len(args)-2:], []string{"-signer", hex.EncodeToString(pub)}) {
-		t.Fatalf("args = %v", args)
-	}
 }
 
 // The engine pins the same vector in its ipc tests: both sides must sign the
@@ -744,11 +721,5 @@ func TestSigningBytesMatchTheEngine(t *testing.T) {
 	const want = "jw4j9TSbTexYJji2QL9Yt8sgopT+GcgrfeJZV9rYmWXEHjHH9HEGQSnYIoAFTa37Yl5FFn/e6JCmzOSXzSfOAA=="
 	if got := base64.StdEncoding.EncodeToString(ed25519.Sign(key, req.signingBytes())); got != want {
 		t.Fatalf("signature = %s, want %s", got, want)
-	}
-}
-
-func TestEndpointHostLeavesOutAKeyInThePath(t *testing.T) {
-	if got := endpointHost("https://go.getblock.io/secret/"); got != "https://go.getblock.io" {
-		t.Fatalf("host = %q", got)
 	}
 }

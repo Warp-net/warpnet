@@ -19,8 +19,7 @@
       <form v-if="!loading" @submit.prevent="save" class="p-5 space-y-4 max-w-xl">
         <p class="text-sm text-dark">
           Which blockchain API and payment engine the wallet uses. The endpoint
-          and headers apply to the next request; the engine binary changes after
-          the node restarts.
+          and headers apply at once; the engine binary after the node restarts.
         </p>
 
         <label v-for="f in fields" :key="f.key" class="block">
@@ -32,44 +31,14 @@
           <span class="text-sm text-dark">{{ f.hint }}</span>
         </label>
 
-        <fieldset class="border border-lighter rounded p-4 space-y-3">
-          <legend class="font-bold px-1">Request headers</legend>
-          <p class="text-sm text-dark">
-            Sent with every request to the endpoint, such as the API key your
-            provider gives you. TronGrid reads it from TRON-PRO-API-KEY.
-          </p>
-          <div
-            v-for="(header, i) in headers" :key="header.key"
-            class="flex flex-wrap items-end gap-2 border-b border-lighter pb-3"
-          >
-            <label class="block flex-1 min-w-[8rem]">
-              <span class="text-sm font-bold">Name</span>
-              <input
-                type="text" v-model.trim="header.name" placeholder="TRON-PRO-API-KEY" spellcheck="false"
-                class="mt-1 w-full rounded border border-lighter bg-white p-2 font-mono text-sm"
-              />
-            </label>
-            <label class="block flex-1 min-w-[8rem]">
-              <span class="text-sm font-bold">Value</span>
-              <input
-                type="password" v-model.trim="header.value" autocomplete="off" spellcheck="false"
-                class="mt-1 w-full rounded border border-lighter bg-white p-2 font-mono text-sm"
-              />
-            </label>
-            <button
-              type="button" @click="headers.splice(i, 1)"
-              class="text-red-600 text-sm font-semibold hover:underline"
-            >
-              <i class="fas fa-trash-alt" aria-hidden="true"></i> Remove
-            </button>
-          </div>
-          <button
-            type="button" @click="addHeader"
-            class="text-blue font-semibold hover:underline"
-          >
-            <i class="fas fa-plus" aria-hidden="true"></i> Add header
-          </button>
-        </fieldset>
+        <label class="block">
+          <span class="font-bold">Request headers</span>
+          <textarea
+            v-model="headers" rows="3" spellcheck="false" placeholder="TRON-PRO-API-KEY: your-key"
+            class="mt-1 w-full rounded border border-lighter bg-white p-2 font-mono text-sm"
+          ></textarea>
+          <span class="text-sm text-dark">One "Name: value" per line, such as your provider's API key</span>
+        </label>
 
         <div class="flex items-center space-x-4">
           <button
@@ -101,8 +70,6 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 
-let headerKey = 0;
-
 export default {
   name: "SettingsWallet",
   components: {
@@ -118,22 +85,14 @@ export default {
       saveError: false,
       ownerProfile: {},
       fields: [
-        { key: 'endpoint', label: 'Blockchain API endpoint', hint: 'TronGrid-compatible http(s) URL, a key in the path included' },
+        { key: 'endpoint', label: 'Blockchain API endpoint', hint: 'TronGrid-compatible http(s) URL' },
         { key: 'binary_path', label: 'Payment engine binary', hint: 'Leave empty to use the bundled one' },
       ],
       settings: {},
-      headers: [],
+      headers: '',
     };
   },
   methods: {
-    load(saved) {
-      this.settings = { ...saved };
-      this.headers = Object.entries(saved.headers || {})
-        .map(([name, value]) => ({ key: ++headerKey, name, value }));
-    },
-    addHeader() {
-      this.headers.push({ key: ++headerKey, name: '', value: '' });
-    },
     async send(settings, message) {
       this.savedMessage = '';
       this.saveError = false;
@@ -153,10 +112,15 @@ export default {
         this._savedTimer = setTimeout(() => { this.savedMessage = ''; }, 3000);
       }
     },
+    load(saved) {
+      this.settings = { ...saved };
+      this.headers = Object.entries(saved.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
+    },
     save() {
-      const headers = Object.fromEntries(
-        this.headers.filter((h) => h.name).map((h) => [h.name, h.value]),
-      );
+      const headers = Object.fromEntries(this.headers.split('\n')
+        .map((line) => line.split(':'))
+        .filter(([name, ...value]) => name.trim() && value.length)
+        .map(([name, ...value]) => [name.trim(), value.join(':').trim()]));
       return this.send({ ...this.settings, headers }, 'Settings saved');
     },
     reset() {

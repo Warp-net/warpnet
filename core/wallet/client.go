@@ -38,9 +38,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"math/big"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,9 +78,6 @@ const (
 	paramDeadline   = "deadline"
 	paramSplitter   = "splitter"
 	paramOrderId    = "order_id"
-
-	paramEndpoint = "endpoint"
-	paramHeaders  = "headers"
 
 	// signingContext must match the engine's: it keeps a request signature from
 	// passing for anything else.
@@ -384,7 +379,7 @@ func (c *Client) ensure() error {
 		log.Errorf("wallet: payment engine binary: %v", err)
 		return err
 	}
-	log.Infof("wallet: starting payment engine %s network=%s endpoint=%s token=%s headers=%d", binary, c.cfg.Network, endpointHost(c.cfg.Endpoint), c.cfg.Token, len(c.cfg.Headers))
+	log.Infof("wallet: starting payment engine %s network=%s endpoint=%s token=%s", binary, c.cfg.Network, c.cfg.Endpoint, c.cfg.Token)
 	ctx, stop := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, binary, args...) //nolint:gosec // the path is our own config or the unpacked embedded engine
 	stdin, err := cmd.StdinPipe()
@@ -442,15 +437,6 @@ func (c *Client) engineArgs() []string {
 		args = append(args, "-signer", hex.EncodeToString(c.signer.Public().(ed25519.PublicKey)))
 	}
 	return args
-}
-
-// endpointHost leaves out the path, where providers such as GetBlock put the key.
-func endpointHost(endpoint string) string {
-	u, err := url.Parse(endpoint)
-	if err != nil || u.Host == "" {
-		return "?"
-	}
-	return u.Scheme + "://" + u.Host
 }
 
 func (c *Client) resolveBinary() (string, error) {
@@ -585,7 +571,7 @@ func (c *Client) fail(cmd *exec.Cmd, err error) {
 	}
 }
 
-func (c *Client) call(ctx context.Context, method string, params, out any) error {
+func (c *Client) call(ctx context.Context, method string, params map[string]any, out any) error {
 	err := c.invoke(ctx, method, params, out)
 	if err != nil {
 		return err
@@ -593,9 +579,10 @@ func (c *Client) call(ctx context.Context, method string, params, out any) error
 	return nil
 }
 
-func (c *Client) invoke(ctx context.Context, method string, params, out any) error {
+func (c *Client) invoke(ctx context.Context, method string, params map[string]any, out any) error {
 	c.mu.Lock()
-	raw, err := c.routed(params)
+	params["endpoint"], params["headers"] = c.cfg.Endpoint, c.cfg.Headers
+	raw, err := json.Marshal(params)
 	if err != nil {
 		c.mu.Unlock()
 		return err
@@ -646,37 +633,12 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 	}
 }
 
-// routed adds the endpoint and headers the owner chose to params, so a change
-// of either reaches the next call without restarting the engine.
-func (c *Client) routed(params any) (json.RawMessage, error) {
-	raw, err := json.Marshal(params)
-	if err != nil {
-		return nil, err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, err
-	}
-	if c.cfg.Endpoint != "" {
-		if fields[paramEndpoint], err = json.Marshal(c.cfg.Endpoint); err != nil {
-			return nil, err
-		}
-	}
-	if len(c.cfg.Headers) > 0 {
-		if fields[paramHeaders], err = json.Marshal(c.cfg.Headers); err != nil {
-			return nil, err
-		}
-	}
-	return json.Marshal(fields)
-}
-
-// SwitchEndpoint sends the calls from now on to endpoint with headers.
+// SwitchEndpoint sends the next calls to endpoint with headers, without
+// restarting the engine.
 func (c *Client) SwitchEndpoint(endpoint string, headers map[string]string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.cfg.Endpoint = endpoint
-	c.cfg.Headers = maps.Clone(headers)
-	log.Infof("wallet: endpoint switched to %s, headers=%d", endpointHost(endpoint), len(headers))
+	c.cfg.Endpoint, c.cfg.Headers = endpoint, headers
 }
 
 func (c *Client) forget(id string) {
@@ -689,7 +651,7 @@ func (c *Client) Address(ctx context.Context, seed string) (string, error) {
 	var out struct {
 		Address string `json:"address"`
 	}
-	err := c.call(ctx, "wallet.address", map[string]string{paramSeed: seed}, &out)
+	err := c.call(ctx, "wallet.address", map[string]any{paramSeed: seed}, &out)
 	return out.Address, err
 }
 
@@ -698,7 +660,7 @@ func (c *Client) Export(ctx context.Context, seed string) (address, privateKey s
 		Address    string `json:"address"`
 		PrivateKey string `json:"private_key"`
 	}
-	if err = c.call(ctx, "wallet.export", map[string]string{paramSeed: seed}, &out); err != nil {
+	if err = c.call(ctx, "wallet.export", map[string]any{paramSeed: seed}, &out); err != nil {
 		return "", "", err
 	}
 	log.Warnf("wallet: private key exported for %s on %s", out.Address, c.cfg.Network)
@@ -714,7 +676,7 @@ func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 		Activated    bool        `json:"activated"`
 		CreatedAt    int64       `json:"created_at"`
 	}
-	if err := c.call(ctx, "wallet.balance", map[string]string{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
+	if err := c.call(ctx, "wallet.balance", map[string]any{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
 		return Account{}, err
 	}
 	return Account{
@@ -856,7 +818,7 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 	var out struct {
 		Available bool `json:"available"`
 	}
-	err := c.call(ctx, "available", map[string]string{"network": c.cfg.Network}, &out)
+	err := c.call(ctx, "available", map[string]any{"network": c.cfg.Network}, &out)
 	return err == nil && out.Available
 }
 

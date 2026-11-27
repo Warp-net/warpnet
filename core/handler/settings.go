@@ -39,7 +39,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"golang.org/x/net/http/httpguts"
 )
 
 // SettingsStorer is the narrow surface the notification-settings handlers need.
@@ -307,11 +306,6 @@ func StreamUpdateWalletSettingsHandler(
 		}
 		if u, err := url.Parse(ev.Endpoint); ev.Endpoint != "" && (err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https")) {
 			return nil, warpnet.WarpError("update wallet settings: endpoint must be an http(s) URL")
-		}
-		for name, value := range ev.Headers {
-			if !httpguts.ValidHeaderFieldName(name) || !httpguts.ValidHeaderFieldValue(value) {
-				return nil, warpnet.WarpError("update wallet settings: invalid header " + strconv.Quote(name))
-			}
 		}
 		if err := repo.SetWalletSettings(ev); err != nil {
 			return nil, err
