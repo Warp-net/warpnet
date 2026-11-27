@@ -389,7 +389,8 @@ export default {
   methods: {
     // pollWallet badges the wallet icon with the transfers that arrived since
     // the tab was last opened. The first run only records where "now" is, so a
-    // wallet with history does not open with a badge for transfers already seen.
+    // wallet with history does not open with a badge for transfers already seen,
+    // and an empty wallet still gets a mark its first transfer lands after.
     async pollWallet() {
       if (!this.profile || this.profile.network !== "testnet") return;
       if (this.$route && this.$route.name === "Wallet") {
@@ -403,10 +404,9 @@ export default {
       const answered = asked.filter((r) => r.status === "fulfilled");
       if (!answered.length) return;
       const incoming = answered.flatMap((r) => r.value || []).filter((t) => t && t.incoming);
-      if (!incoming.length) return;
       const seen = Number(this.readWalletSeen());
       if (!seen) {
-        this.storeWalletSeen(Math.max(...incoming.map((t) => t.timestamp || 0)));
+        this.storeWalletSeen(Math.max(Date.now(), ...incoming.map((t) => t.timestamp || 0)));
         return;
       }
       this.walletNew = incoming.filter((t) => (t.timestamp || 0) > seen).length;

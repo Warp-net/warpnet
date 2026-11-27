@@ -69,10 +69,23 @@ describe('SideNav wallet badge', () => {
         { tx: 'b', incoming: true, timestamp: 900 },
       ],
     );
+    const before = Date.now();
     renderNav();
     await waitFor(() => expect(warpnetService.getWalletHistory).toHaveBeenCalled());
-    await waitFor(() => expect(localStorage.getItem(SEEN_KEY)).toBe('1000'));
+    await waitFor(() => expect(Number(localStorage.getItem(SEEN_KEY))).toBeGreaterThanOrEqual(before));
     expect(screen.queryByTestId('wallet-badge')).toBeNull();
+  });
+
+  it('badges the first transfer an empty wallet ever receives', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let history = [];
+    warpnetService.getWalletHistory.mockImplementation(async (_l, asset) => (asset === 'USDT' ? history : []));
+    renderNav();
+    await waitFor(() => expect(localStorage.getItem(SEEN_KEY)).not.toBeNull());
+    history = [{ tx: 'first', asset: 'USDT', incoming: true, timestamp: Date.now() + 1000 }];
+    await vi.advanceTimersByTimeAsync(61000);
+    await waitFor(() => expect(screen.getByTestId('wallet-badge').textContent.trim()).toBe('1'));
+    vi.useRealTimers();
   });
 
   it('counts only the incoming transfers that arrived since the wallet was last opened', async () => {
