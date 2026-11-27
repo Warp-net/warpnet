@@ -18,8 +18,8 @@
 
       <form v-if="!loading" @submit.prevent="save" class="p-5 space-y-4 max-w-xl">
         <p class="text-sm text-dark">
-          Which blockchain API and payment engine the wallet uses. The endpoint
-          and headers apply at once; the engine binary after the node restarts.
+          Which blockchain API and payment engine the wallet uses. Changes take
+          effect after the node restarts.
         </p>
 
         <label v-for="f in fields" :key="f.key" class="block">

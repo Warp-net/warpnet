@@ -511,15 +511,6 @@ func (s *stubWalletSettingsRepo) SetWalletSettings(ws domain.WalletSettings) err
 	return s.err
 }
 
-type stubEndpointSwitcher struct {
-	endpoint string
-	headers  map[string]string
-}
-
-func (s *stubEndpointSwitcher) SwitchEndpoint(endpoint string, headers map[string]string) {
-	s.endpoint, s.headers = endpoint, headers
-}
-
 func TestStreamWalletSettingsHandlers(t *testing.T) {
 	defaults := domain.WalletSettings{Endpoint: "https://api.trongrid.io"}
 	t.Run("get", func(t *testing.T) {
@@ -535,21 +526,13 @@ func TestStreamWalletSettingsHandlers(t *testing.T) {
 
 	t.Run("update", func(t *testing.T) {
 		repo := &stubWalletSettingsRepo{}
-		in := domain.WalletSettings{
-			Endpoint:   "https://nile.trongrid.io",
-			BinaryPath: "/opt/engine",
-			Headers:    map[string]string{"TRON-PRO-API-KEY": "key"},
-		}
-		switcher := &stubEndpointSwitcher{}
-		resp, err := StreamUpdateWalletSettingsHandler(repo, switcher, defaults)(marshal(t, in), nil)
+		in := domain.WalletSettings{Endpoint: "https://nile.trongrid.io", BinaryPath: "/opt/engine"}
+		resp, err := StreamUpdateWalletSettingsHandler(repo)(marshal(t, in), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if !reflect.DeepEqual(repo.saved, in) || !reflect.DeepEqual(domain.WalletSettings(resp.(event.GetWalletSettingsResponse)), in) {
 			t.Fatalf("unexpected saved %+v, response %+v", repo.saved, resp)
-		}
-		if switcher.endpoint != in.Endpoint || !reflect.DeepEqual(switcher.headers, in.Headers) {
-			t.Fatalf("wallet switched to %+v", switcher)
 		}
 	})
 
@@ -557,8 +540,7 @@ func TestStreamWalletSettingsHandlers(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := &stubWalletSettingsRepo{}
 			in := domain.WalletSettings{Endpoint: endpoint}
-			switcher := &stubEndpointSwitcher{}
-			if _, err := StreamUpdateWalletSettingsHandler(repo, switcher, defaults)(marshal(t, in), nil); err == nil {
+			if _, err := StreamUpdateWalletSettingsHandler(repo)(marshal(t, in), nil); err == nil {
 				t.Fatalf("expected validation error for %q", endpoint)
 			}
 			if !reflect.DeepEqual(repo.saved, domain.WalletSettings{}) {

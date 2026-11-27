@@ -73,11 +73,6 @@ type WalletSettingsStorer interface {
 	SetWalletSettings(s domain.WalletSettings) error
 }
 
-// WalletEndpointSwitcher moves the wallet's calls to another endpoint.
-type WalletEndpointSwitcher interface {
-	SwitchEndpoint(endpoint string, headers map[string]string)
-}
-
 // SettingsAuthStorer resolves the local node owner.
 type SettingsAuthStorer interface {
 	GetOwner() domain.Owner
@@ -296,8 +291,6 @@ func StreamGetWalletSettingsHandler(
 
 func StreamUpdateWalletSettingsHandler(
 	repo WalletSettingsStorer,
-	wallet WalletEndpointSwitcher,
-	defaults domain.WalletSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateWalletSettingsEvent
@@ -310,11 +303,6 @@ func StreamUpdateWalletSettingsHandler(
 		if err := repo.SetWalletSettings(ev); err != nil {
 			return nil, err
 		}
-		endpoint := ev.Endpoint
-		if endpoint == "" {
-			endpoint = defaults.Endpoint
-		}
-		wallet.SwitchEndpoint(endpoint, ev.Headers)
 		return event.GetWalletSettingsResponse(ev), nil
 	}
 }

@@ -694,7 +694,7 @@ func TestCallsCarryTheEndpointAndHeadersSigned(t *testing.T) {
 		t.Fatal(err)
 	}
 	client.signer = signer
-	client.SwitchEndpoint("https://go.getblock.io/secret", map[string]string{"TRON-PRO-API-KEY": "key"})
+	client.cfg.Endpoint, client.cfg.Headers = "https://go.getblock.io/secret", map[string]string{"TRON-PRO-API-KEY": "key"}
 	if !client.IsAvailable(t.Context()) {
 		t.Fatal("not available")
 	}
@@ -713,8 +713,6 @@ func TestCallsCarryTheEndpointAndHeadersSigned(t *testing.T) {
 	}
 }
 
-// The engine pins the same vector in its ipc tests: both sides must sign the
-// same bytes or every call is refused.
 func TestSigningBytesMatchTheEngine(t *testing.T) {
 	key := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize))
 	req := request{ID: "42", Method: "wallet.balance", Params: json.RawMessage(`{"network":"testnet","endpoint":"https://nile.trongrid.io"}`)}

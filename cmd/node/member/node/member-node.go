@@ -954,7 +954,7 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_WALLET,
-			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo, m.walletClient, walletDefaults),
+			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo),
 		},
 	}
 }

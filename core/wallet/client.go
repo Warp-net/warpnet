@@ -79,8 +79,6 @@ const (
 	paramSplitter   = "splitter"
 	paramOrderId    = "order_id"
 
-	// signingContext must match the engine's: it keeps a request signature from
-	// passing for anything else.
 	signingContext = "payment-engine ipc request v1"
 )
 
@@ -232,8 +230,6 @@ type request struct {
 	Signature string          `json:"signature,omitempty"`
 }
 
-// signingBytes are what the engine checks a signature against: the id, the
-// method and the params as sent, each prefixed by its length.
 func (r request) signingBytes() []byte {
 	out := make([]byte, 0, len(signingContext)+len(r.ID)+len(r.Method)+len(r.Params)+4*binary.MaxVarintLen64)
 	for _, field := range [][]byte{[]byte(signingContext), []byte(r.ID), []byte(r.Method), r.Params} {
@@ -366,8 +362,6 @@ func (c *Client) ensure() error {
 	if c.cmd != nil {
 		return nil
 	}
-	// A key per launch: the engine then answers only this process, so no one
-	// else can point it at another endpoint or replay a payment.
 	_, signer, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		return err
@@ -580,13 +574,12 @@ func (c *Client) call(ctx context.Context, method string, params map[string]any,
 }
 
 func (c *Client) invoke(ctx context.Context, method string, params map[string]any, out any) error {
-	c.mu.Lock()
 	params["endpoint"], params["headers"] = c.cfg.Endpoint, c.cfg.Headers
 	raw, err := json.Marshal(params)
 	if err != nil {
-		c.mu.Unlock()
 		return err
 	}
+	c.mu.Lock()
 	if err := c.ensure(); err != nil {
 		c.mu.Unlock()
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -631,14 +624,6 @@ func (c *Client) invoke(ctx context.Context, method string, params map[string]an
 		}
 		return json.Unmarshal(resp.Result, out)
 	}
-}
-
-// SwitchEndpoint sends the next calls to endpoint with headers, without
-// restarting the engine.
-func (c *Client) SwitchEndpoint(endpoint string, headers map[string]string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cfg.Endpoint, c.cfg.Headers = endpoint, headers
 }
 
 func (c *Client) forget(id string) {
