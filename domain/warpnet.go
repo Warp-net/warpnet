@@ -443,6 +443,8 @@ type NetworkSettings struct {
 type WalletSettings struct {
 	Endpoint   string `json:"endpoint"`
 	BinaryPath string `json:"binary_path"`
+	// Headers go with every request to the endpoint, such as an API key.
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 type SponsoredSettings struct {

@@ -207,6 +207,7 @@ func NewMemberNode(
 	walletConfig := wallet.DefaultConfig(
 		warpNetwork, walletSettings.BinaryPath, walletSettings.Endpoint,
 	)
+	walletConfig.Headers = walletSettings.Headers
 	walletClient := wallet.New(walletConfig)
 	walletRepo := database.NewWalletRepo(db)
 
@@ -953,7 +954,7 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_WALLET,
-			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo),
+			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo, m.walletClient, walletDefaults),
 		},
 	}
 }

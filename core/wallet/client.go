@@ -30,12 +30,17 @@ package wallet
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,6 +80,13 @@ const (
 	paramDeadline   = "deadline"
 	paramSplitter   = "splitter"
 	paramOrderId    = "order_id"
+
+	paramEndpoint = "endpoint"
+	paramHeaders  = "headers"
+
+	// signingContext must match the engine's: it keeps a request signature from
+	// passing for anything else.
+	signingContext = "payment-engine ipc request v1"
 )
 
 var tronAddress = regexp.MustCompile(`^T[1-9A-HJ-NP-Za-km-z]{33}$`)
@@ -139,6 +151,7 @@ type Config struct {
 	BinaryPath    string
 	Network       string
 	Endpoint      string
+	Headers       map[string]string
 	Token         string
 	TokenContract string
 	Decimals      uint8
@@ -218,9 +231,21 @@ type QuoteStep struct {
 }
 
 type request struct {
-	ID     string          `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params,omitempty"`
+	ID        string          `json:"id"`
+	Method    string          `json:"method"`
+	Params    json.RawMessage `json:"params,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+}
+
+// signingBytes are what the engine checks a signature against: the id, the
+// method and the params as sent, each prefixed by its length.
+func (r request) signingBytes() []byte {
+	out := make([]byte, 0, len(signingContext)+len(r.ID)+len(r.Method)+len(r.Params)+4*binary.MaxVarintLen64)
+	for _, field := range [][]byte{[]byte(signingContext), []byte(r.ID), []byte(r.Method), r.Params} {
+		out = binary.AppendUvarint(out, uint64(len(field)))
+		out = append(out, field...)
+	}
+	return out
 }
 
 type responseError struct {
@@ -254,6 +279,7 @@ type Client struct {
 	cmd      *exec.Cmd
 	stop     context.CancelFunc
 	stdin    io.WriteCloser
+	signer   ed25519.PrivateKey
 	pending  map[string]chan response
 	seq      uint64
 	failure  error
@@ -345,13 +371,20 @@ func (c *Client) ensure() error {
 	if c.cmd != nil {
 		return nil
 	}
+	// A key per launch: the engine then answers only this process, so no one
+	// else can point it at another endpoint or replay a payment.
+	_, signer, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return err
+	}
+	c.signer = signer
 	args := c.engineArgs()
 	binary, err := c.resolveBinary()
 	if err != nil {
 		log.Errorf("wallet: payment engine binary: %v", err)
 		return err
 	}
-	log.Infof("wallet: starting payment engine %s network=%s endpoint=%s token=%s", binary, c.cfg.Network, c.cfg.Endpoint, c.cfg.Token)
+	log.Infof("wallet: starting payment engine %s network=%s endpoint=%s token=%s headers=%d", binary, c.cfg.Network, endpointHost(c.cfg.Endpoint), c.cfg.Token, len(c.cfg.Headers))
 	ctx, stop := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, binary, args...) //nolint:gosec // the path is our own config or the unpacked embedded engine
 	stdin, err := cmd.StdinPipe()
@@ -405,7 +438,19 @@ func (c *Client) engineArgs() []string {
 	if c.cfg.RPS > 0 {
 		args = append(args, "-rps", strconv.FormatFloat(c.cfg.RPS, 'g', -1, 64))
 	}
+	if c.signer != nil {
+		args = append(args, "-signer", hex.EncodeToString(c.signer.Public().(ed25519.PublicKey)))
+	}
 	return args
+}
+
+// endpointHost leaves out the path, where providers such as GetBlock put the key.
+func endpointHost(endpoint string) string {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return "?"
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 func (c *Client) resolveBinary() (string, error) {
@@ -549,11 +594,12 @@ func (c *Client) call(ctx context.Context, method string, params, out any) error
 }
 
 func (c *Client) invoke(ctx context.Context, method string, params, out any) error {
-	raw, err := json.Marshal(params)
+	c.mu.Lock()
+	raw, err := c.routed(params)
 	if err != nil {
+		c.mu.Unlock()
 		return err
 	}
-	c.mu.Lock()
 	if err := c.ensure(); err != nil {
 		c.mu.Unlock()
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -562,7 +608,11 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 	id := strconv.FormatUint(c.seq, 10)
 	ch := make(chan response, 1)
 	c.pending[id] = ch
-	line, err := json.Marshal(request{ID: id, Method: method, Params: raw})
+	req := request{ID: id, Method: method, Params: raw}
+	if c.signer != nil {
+		req.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(c.signer, req.signingBytes()))
+	}
+	line, err := json.Marshal(req)
 	if err == nil {
 		_, err = c.stdin.Write(append(line, '\n'))
 	}
@@ -594,6 +644,39 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 		}
 		return json.Unmarshal(resp.Result, out)
 	}
+}
+
+// routed adds the endpoint and headers the owner chose to params, so a change
+// of either reaches the next call without restarting the engine.
+func (c *Client) routed(params any) (json.RawMessage, error) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	if c.cfg.Endpoint != "" {
+		if fields[paramEndpoint], err = json.Marshal(c.cfg.Endpoint); err != nil {
+			return nil, err
+		}
+	}
+	if len(c.cfg.Headers) > 0 {
+		if fields[paramHeaders], err = json.Marshal(c.cfg.Headers); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(fields)
+}
+
+// SwitchEndpoint sends the calls from now on to endpoint with headers.
+func (c *Client) SwitchEndpoint(endpoint string, headers map[string]string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cfg.Endpoint = endpoint
+	c.cfg.Headers = maps.Clone(headers)
+	log.Infof("wallet: endpoint switched to %s, headers=%d", endpointHost(endpoint), len(headers))
 }
 
 func (c *Client) forget(id string) {

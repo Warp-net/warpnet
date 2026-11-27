@@ -511,6 +511,15 @@ func (s *stubWalletSettingsRepo) SetWalletSettings(ws domain.WalletSettings) err
 	return s.err
 }
 
+type stubEndpointSwitcher struct {
+	endpoint string
+	headers  map[string]string
+}
+
+func (s *stubEndpointSwitcher) SwitchEndpoint(endpoint string, headers map[string]string) {
+	s.endpoint, s.headers = endpoint, headers
+}
+
 func TestStreamWalletSettingsHandlers(t *testing.T) {
 	defaults := domain.WalletSettings{Endpoint: "https://api.trongrid.io"}
 	t.Run("get", func(t *testing.T) {
@@ -526,24 +535,52 @@ func TestStreamWalletSettingsHandlers(t *testing.T) {
 
 	t.Run("update", func(t *testing.T) {
 		repo := &stubWalletSettingsRepo{}
-		in := domain.WalletSettings{Endpoint: "https://nile.trongrid.io", BinaryPath: "/opt/engine"}
-		resp, err := StreamUpdateWalletSettingsHandler(repo)(marshal(t, in), nil)
+		in := domain.WalletSettings{
+			Endpoint:   "https://nile.trongrid.io",
+			BinaryPath: "/opt/engine",
+			Headers:    map[string]string{"TRON-PRO-API-KEY": "key"},
+		}
+		switcher := &stubEndpointSwitcher{}
+		resp, err := StreamUpdateWalletSettingsHandler(repo, switcher, defaults)(marshal(t, in), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if repo.saved != in || domain.WalletSettings(resp.(event.GetWalletSettingsResponse)) != in {
+		if !reflect.DeepEqual(repo.saved, in) || !reflect.DeepEqual(domain.WalletSettings(resp.(event.GetWalletSettingsResponse)), in) {
 			t.Fatalf("unexpected saved %+v, response %+v", repo.saved, resp)
+		}
+		if switcher.endpoint != in.Endpoint || !reflect.DeepEqual(switcher.headers, in.Headers) {
+			t.Fatalf("wallet switched to %+v", switcher)
 		}
 	})
 
-	for name, endpoint := range map[string]string{"without host": "https://", "not http": "ftp://api.trongrid.io"} {
+	t.Run("reset switches to the default endpoint", func(t *testing.T) {
+		switcher := &stubEndpointSwitcher{endpoint: "https://old.example", headers: map[string]string{"X-Key": "k"}}
+		if _, err := StreamUpdateWalletSettingsHandler(&stubWalletSettingsRepo{}, switcher, defaults)([]byte("{}"), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if switcher.endpoint != defaults.Endpoint || len(switcher.headers) != 0 {
+			t.Fatalf("wallet switched to %+v", switcher)
+		}
+	})
+
+	invalid := map[string]domain.WalletSettings{
+		"without host":      {Endpoint: "https://"},
+		"not http":          {Endpoint: "ftp://api.trongrid.io"},
+		"header name":       {Headers: map[string]string{"Bad Name": "key"}},
+		"header value":      {Headers: map[string]string{"X-Key": "key\r\nX-Injected: 1"}},
+		"empty header name": {Headers: map[string]string{"": "key"}},
+	}
+	for name, in := range invalid {
 		t.Run(name, func(t *testing.T) {
 			repo := &stubWalletSettingsRepo{}
-			in := domain.WalletSettings{Endpoint: endpoint}
-			if _, err := StreamUpdateWalletSettingsHandler(repo)(marshal(t, in), nil); err == nil {
-				t.Fatalf("expected validation error for %q", endpoint)
+			switcher := &stubEndpointSwitcher{}
+			if _, err := StreamUpdateWalletSettingsHandler(repo, switcher, defaults)(marshal(t, in), nil); err == nil {
+				t.Fatalf("expected validation error for %+v", in)
 			}
-			if repo.saved != (domain.WalletSettings{}) {
+			if switcher.endpoint != "" {
+				t.Fatalf("invalid settings must not reach the wallet, got %+v", switcher)
+			}
+			if !reflect.DeepEqual(repo.saved, domain.WalletSettings{}) {
 				t.Fatalf("invalid settings must not be saved, got %+v", repo.saved)
 			}
 		})

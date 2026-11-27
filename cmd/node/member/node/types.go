@@ -126,6 +126,7 @@ type WalletProvider interface {
 	Splitter() string
 	Splitters() []string
 	MaxFeePercent() uint64
+	SwitchEndpoint(endpoint string, headers map[string]string)
 	Close()
 }
 
