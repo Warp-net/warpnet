@@ -117,10 +117,11 @@ type Artifact struct {
 	ChecksumName  string // SHA-256 listing of AssetName
 	SignatureName string // ed25519 signature of ChecksumName
 	BinaryName    string // executable inside the archive
+	IsReportOnly  bool   // a release is only reported to the owner, never installed
 }
 
 func (a Artifact) isSupported() bool {
-	return a.AssetName != "" && a.ChecksumName != "" && a.BinaryName != ""
+	return a.IsReportOnly || (a.AssetName != "" && a.ChecksumName != "" && a.BinaryName != "")
 }
 
 // RelayArtifact returns the relay asset for the running platform. Releases
@@ -173,6 +174,10 @@ func MemberArtifact() Artifact {
 			SignatureName: "warpnet_windows_amd64_checksums.txt.sig",
 			BinaryName:    warpnet.WarpnetName + ".exe",
 		}
+	case "darwin":
+		// The release ships a whole warpnet.app bundle: swapping only the binary
+		// inside it leaves Info.plist behind and breaks a signed bundle.
+		return Artifact{IsReportOnly: true}
 	}
 	return Artifact{}
 }
@@ -230,6 +235,9 @@ func NewSelfUpdater(
 	u.binary = binary
 	u.failures = newFailureMarker(binary.Path())
 
+	if a.IsReportOnly {
+		return u
+	}
 	if err := u.verifyInstallPath(); err != nil {
 		log.Warnf("selfupdate: %v", err)
 	} else {

@@ -613,7 +613,8 @@ func TestMemberArtifact(t *testing.T) {
 		assert.Equal(t, "warpnet_linux_"+runtime.GOARCH+"_checksums.txt", a.ChecksumName)
 		assert.Equal(t, "warpnet", a.BinaryName)
 	case "darwin":
-		assert.False(t, a.isSupported(), "the signed macOS build is not replaced in place")
+		require.True(t, a.isSupported())
+		assert.True(t, a.IsReportOnly, "the warpnet.app bundle is not replaced in place")
 	case "windows":
 		require.True(t, a.isSupported())
 		assert.Equal(t, "warpnet_windows_amd64.zip", a.AssetName)
@@ -640,6 +641,7 @@ func TestModeratorArtifact(t *testing.T) {
 func TestArtifactSupport(t *testing.T) {
 	assert.False(t, Artifact{}.isSupported())
 	assert.False(t, Artifact{AssetName: testAsset}.isSupported())
+	assert.True(t, Artifact{IsReportOnly: true}.isSupported())
 	assert.True(t, Artifact{
 		AssetName: testAsset, ChecksumName: testChecksum, BinaryName: testBinary,
 	}.isSupported())

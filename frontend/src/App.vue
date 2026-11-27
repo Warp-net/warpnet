@@ -153,8 +153,8 @@ export default {
       if (!this.isUpdateInstallable) {
         return (
           out +
-          "This copy cannot replace itself: it is installed where only the system can " +
-          "write. Download the new version and install it the way this one was installed."
+          "This copy cannot replace itself. " +
+          "Download the new version and install it the way this one was installed."
         );
       }
       return out + "Your node will restart into the new version, so you will have to sign in again.";

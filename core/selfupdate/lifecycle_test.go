@@ -150,6 +150,12 @@ func TestNewSelfUpdaterResolvesItsOwnBinary(t *testing.T) {
 	require.Equal(t, checkInterval, u.interval)
 }
 
+func TestNewSelfUpdaterOnlyReportsForReportOnlyArtifact(t *testing.T) {
+	u := NewSelfUpdater(context.Background(), semver.MustParse("1.0.0"), Artifact{IsReportOnly: true}, true)
+	require.NotNil(t, u.binary)
+	require.False(t, u.IsInstallable(), "the binary sits in a writable dir, yet is never replaced")
+}
+
 func TestCurrentExecutable(t *testing.T) {
 	e, err := currentExecutable()
 	require.NoError(t, err)
