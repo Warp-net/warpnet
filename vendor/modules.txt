@@ -23,7 +23,7 @@ github.com/Warp-net/keepalive
 # github.com/Warp-net/libp2p-camouflage-transport v0.0.3
 ## explicit; go 1.26.0
 github.com/Warp-net/libp2p-camouflage-transport
-# github.com/Warp-net/payment-engine-lib v0.0.8
+# github.com/Warp-net/payment-engine-lib v0.0.9
 ## explicit; go 1.26
 github.com/Warp-net/payment-engine-lib
 # github.com/andybalholm/brotli v1.2.7

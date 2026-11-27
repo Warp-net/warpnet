@@ -1364,6 +1364,7 @@ export const warpnetService = {
             body: {
                 endpoint: String(settings.endpoint ?? '').trim(),
                 binary_path: String(settings.binary_path ?? '').trim(),
+                headers: settings.headers ?? {},
             },
         });
         if (!resp || resp.code || !('endpoint' in resp)) {

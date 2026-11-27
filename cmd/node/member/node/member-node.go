@@ -207,6 +207,7 @@ func NewMemberNode(
 	walletConfig := wallet.DefaultConfig(
 		warpNetwork, walletSettings.BinaryPath, walletSettings.Endpoint,
 	)
+	walletConfig.Headers = walletSettings.Headers
 	walletClient := wallet.New(walletConfig)
 	walletRepo := database.NewWalletRepo(db)
 

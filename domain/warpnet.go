@@ -441,8 +441,9 @@ type NetworkSettings struct {
 }
 
 type WalletSettings struct {
-	Endpoint   string `json:"endpoint"`
-	BinaryPath string `json:"binary_path"`
+	Endpoint   string            `json:"endpoint"`
+	BinaryPath string            `json:"binary_path"`
+	Headers    map[string]string `json:"headers,omitempty"`
 }
 
 type SponsoredSettings struct {

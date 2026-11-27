@@ -32,7 +32,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -280,8 +282,10 @@ func TestEngineArgumentsAreOnesTheEngineAccepts(t *testing.T) {
 		"-mainnet-registry": true, "-testnet-registry": true,
 		"-network": true, "-rps": true, "-timeout": true,
 		"-confirmations": true, "-request-timeout": true, "-contract": true,
+		"-signer": true,
 	}
 	client, _ := engineIn(t, Config{Network: "testnet", Endpoint: "https://nile.trongrid.io", RPS: 2}, nil)
+	_, client.signer, _ = ed25519.GenerateKey(nil)
 	args := client.engineArgs()
 	if args[0] != "serve" {
 		t.Fatalf("args = %v, want serve first", args)
@@ -676,5 +680,44 @@ func TestTransferKeepsTheTxOfATransferWhoseAnswerWasLost(t *testing.T) {
 	tx, err := client.Transfer(context.Background(), "seed", "TRX", "TRecipient", "5")
 	if err == nil || tx != "tx-maybe" {
 		t.Fatalf("tx = %q, err = %v: the owner must learn the transfer may be on chain", tx, err)
+	}
+}
+
+func TestCallsCarryTheEndpointAndHeadersSigned(t *testing.T) {
+	calls := make(chan request, 1)
+	client := answeringEngine(t, func(req request) string {
+		calls <- req
+		return `{"id":"` + req.ID + `","result":{"available":true}}`
+	})
+	_, signer, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.signer = signer
+	client.cfg.Endpoint, client.cfg.Headers = "https://go.getblock.io/secret", map[string]string{"TRON-PRO-API-KEY": "key"}
+	if !client.IsAvailable(t.Context()) {
+		t.Fatal("not available")
+	}
+	req := <-calls
+	var params map[string]any
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	headers, _ := params["headers"].(map[string]any)
+	if params["endpoint"] != "https://go.getblock.io/secret" || headers["TRON-PRO-API-KEY"] != "key" || params["network"] != "testnet" {
+		t.Fatalf("params = %s", req.Params)
+	}
+	sig, err := base64.StdEncoding.DecodeString(req.Signature)
+	if err != nil || !ed25519.Verify(signer.Public().(ed25519.PublicKey), req.signingBytes(), sig) {
+		t.Fatalf("signature %q does not verify", req.Signature)
+	}
+}
+
+func TestSigningBytesMatchTheEngine(t *testing.T) {
+	key := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize))
+	req := request{ID: "42", Method: "wallet.balance", Params: json.RawMessage(`{"network":"testnet","endpoint":"https://nile.trongrid.io"}`)}
+	const want = "jw4j9TSbTexYJji2QL9Yt8sgopT+GcgrfeJZV9rYmWXEHjHH9HEGQSnYIoAFTa37Yl5FFn/e6JCmzOSXzSfOAA=="
+	if got := base64.StdEncoding.EncodeToString(ed25519.Sign(key, req.signingBytes())); got != want {
+		t.Fatalf("signature = %s, want %s", got, want)
 	}
 }

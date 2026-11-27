@@ -30,7 +30,10 @@ package wallet
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -75,6 +78,8 @@ const (
 	paramDeadline   = "deadline"
 	paramSplitter   = "splitter"
 	paramOrderId    = "order_id"
+
+	signingContext = "payment-engine ipc request v1"
 )
 
 var tronAddress = regexp.MustCompile(`^T[1-9A-HJ-NP-Za-km-z]{33}$`)
@@ -139,6 +144,7 @@ type Config struct {
 	BinaryPath    string
 	Network       string
 	Endpoint      string
+	Headers       map[string]string
 	Token         string
 	TokenContract string
 	Decimals      uint8
@@ -218,9 +224,19 @@ type QuoteStep struct {
 }
 
 type request struct {
-	ID     string          `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params,omitempty"`
+	ID        string          `json:"id"`
+	Method    string          `json:"method"`
+	Params    json.RawMessage `json:"params,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+}
+
+func (r request) signingBytes() []byte {
+	out := make([]byte, 0, len(signingContext)+len(r.ID)+len(r.Method)+len(r.Params)+4*binary.MaxVarintLen64)
+	for _, field := range [][]byte{[]byte(signingContext), []byte(r.ID), []byte(r.Method), r.Params} {
+		out = binary.AppendUvarint(out, uint64(len(field)))
+		out = append(out, field...)
+	}
+	return out
 }
 
 type responseError struct {
@@ -254,6 +270,7 @@ type Client struct {
 	cmd      *exec.Cmd
 	stop     context.CancelFunc
 	stdin    io.WriteCloser
+	signer   ed25519.PrivateKey
 	pending  map[string]chan response
 	seq      uint64
 	failure  error
@@ -345,6 +362,11 @@ func (c *Client) ensure() error {
 	if c.cmd != nil {
 		return nil
 	}
+	_, signer, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return err
+	}
+	c.signer = signer
 	args := c.engineArgs()
 	binary, err := c.resolveBinary()
 	if err != nil {
@@ -404,6 +426,9 @@ func (c *Client) engineArgs() []string {
 	}
 	if c.cfg.RPS > 0 {
 		args = append(args, "-rps", strconv.FormatFloat(c.cfg.RPS, 'g', -1, 64))
+	}
+	if c.signer != nil {
+		args = append(args, "-signer", hex.EncodeToString(c.signer.Public().(ed25519.PublicKey)))
 	}
 	return args
 }
@@ -540,7 +565,7 @@ func (c *Client) fail(cmd *exec.Cmd, err error) {
 	}
 }
 
-func (c *Client) call(ctx context.Context, method string, params, out any) error {
+func (c *Client) call(ctx context.Context, method string, params map[string]any, out any) error {
 	err := c.invoke(ctx, method, params, out)
 	if err != nil {
 		return err
@@ -548,7 +573,8 @@ func (c *Client) call(ctx context.Context, method string, params, out any) error
 	return nil
 }
 
-func (c *Client) invoke(ctx context.Context, method string, params, out any) error {
+func (c *Client) invoke(ctx context.Context, method string, params map[string]any, out any) error {
+	params["endpoint"], params["headers"] = c.cfg.Endpoint, c.cfg.Headers
 	raw, err := json.Marshal(params)
 	if err != nil {
 		return err
@@ -562,7 +588,11 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 	id := strconv.FormatUint(c.seq, 10)
 	ch := make(chan response, 1)
 	c.pending[id] = ch
-	line, err := json.Marshal(request{ID: id, Method: method, Params: raw})
+	req := request{ID: id, Method: method, Params: raw}
+	if c.signer != nil {
+		req.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(c.signer, req.signingBytes()))
+	}
+	line, err := json.Marshal(req)
 	if err == nil {
 		_, err = c.stdin.Write(append(line, '\n'))
 	}
@@ -606,7 +636,7 @@ func (c *Client) Address(ctx context.Context, seed string) (string, error) {
 	var out struct {
 		Address string `json:"address"`
 	}
-	err := c.call(ctx, "wallet.address", map[string]string{paramSeed: seed}, &out)
+	err := c.call(ctx, "wallet.address", map[string]any{paramSeed: seed}, &out)
 	return out.Address, err
 }
 
@@ -615,7 +645,7 @@ func (c *Client) Export(ctx context.Context, seed string) (address, privateKey s
 		Address    string `json:"address"`
 		PrivateKey string `json:"private_key"`
 	}
-	if err = c.call(ctx, "wallet.export", map[string]string{paramSeed: seed}, &out); err != nil {
+	if err = c.call(ctx, "wallet.export", map[string]any{paramSeed: seed}, &out); err != nil {
 		return "", "", err
 	}
 	log.Warnf("wallet: private key exported for %s on %s", out.Address, c.cfg.Network)
@@ -631,7 +661,7 @@ func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 		Activated    bool        `json:"activated"`
 		CreatedAt    int64       `json:"created_at"`
 	}
-	if err := c.call(ctx, "wallet.balance", map[string]string{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
+	if err := c.call(ctx, "wallet.balance", map[string]any{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
 		return Account{}, err
 	}
 	return Account{
@@ -773,7 +803,7 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 	var out struct {
 		Available bool `json:"available"`
 	}
-	err := c.call(ctx, "available", map[string]string{"network": c.cfg.Network}, &out)
+	err := c.call(ctx, "available", map[string]any{"network": c.cfg.Network}, &out)
 	return err == nil && out.Available
 }
 

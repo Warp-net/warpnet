@@ -31,6 +31,15 @@
           <span class="text-sm text-dark">{{ f.hint }}</span>
         </label>
 
+        <label class="block">
+          <span class="font-bold">Request headers</span>
+          <textarea
+            v-model="headers" rows="3" spellcheck="false" placeholder="TRON-PRO-API-KEY: your-key"
+            class="mt-1 w-full rounded border border-lighter bg-white p-2 font-mono text-sm"
+          ></textarea>
+          <span class="text-sm text-dark">One "Name: value" per line, such as your provider's API key</span>
+        </label>
+
         <div class="flex items-center space-x-4">
           <button
             type="submit"
@@ -80,6 +89,7 @@ export default {
         { key: 'binary_path', label: 'Payment engine binary', hint: 'Leave empty to use the bundled one' },
       ],
       settings: {},
+      headers: '',
     };
   },
   methods: {
@@ -89,7 +99,7 @@ export default {
       this.saving = true;
       try {
         await warpnetService.updateWalletSettings(settings);
-        this.settings = { ...(await warpnetService.getWalletSettings()) };
+        this.load(await warpnetService.getWalletSettings());
         this.savedMessage = message;
       } catch (err) {
         console.error('Failed to save wallet settings:', err);
@@ -102,8 +112,16 @@ export default {
         this._savedTimer = setTimeout(() => { this.savedMessage = ''; }, 3000);
       }
     },
+    load(saved) {
+      this.settings = { ...saved };
+      this.headers = Object.entries(saved.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
+    },
     save() {
-      return this.send(this.settings, 'Settings saved');
+      const headers = Object.fromEntries(this.headers.split('\n')
+        .map((line) => line.split(':'))
+        .filter(([name, ...value]) => name.trim() && value.length)
+        .map(([name, ...value]) => [name.trim(), value.join(':').trim()]));
+      return this.send({ ...this.settings, headers }, 'Settings saved');
     },
     reset() {
       return this.send({}, 'Defaults restored');
@@ -117,7 +135,7 @@ export default {
     try {
       const saved = await warpnetService.getWalletSettings();
       if (saved && typeof saved === 'object') {
-        this.settings = { ...saved };
+        this.load(saved);
       }
     } catch (err) {
       console.error('Failed to load wallet settings:', err);

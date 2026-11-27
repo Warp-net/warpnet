@@ -531,7 +531,7 @@ func TestStreamWalletSettingsHandlers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if repo.saved != in || domain.WalletSettings(resp.(event.GetWalletSettingsResponse)) != in {
+		if !reflect.DeepEqual(repo.saved, in) || !reflect.DeepEqual(domain.WalletSettings(resp.(event.GetWalletSettingsResponse)), in) {
 			t.Fatalf("unexpected saved %+v, response %+v", repo.saved, resp)
 		}
 	})
@@ -543,7 +543,7 @@ func TestStreamWalletSettingsHandlers(t *testing.T) {
 			if _, err := StreamUpdateWalletSettingsHandler(repo)(marshal(t, in), nil); err == nil {
 				t.Fatalf("expected validation error for %q", endpoint)
 			}
-			if repo.saved != (domain.WalletSettings{}) {
+			if !reflect.DeepEqual(repo.saved, domain.WalletSettings{}) {
 				t.Fatalf("invalid settings must not be saved, got %+v", repo.saved)
 			}
 		})
