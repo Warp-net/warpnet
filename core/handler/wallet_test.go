@@ -103,6 +103,40 @@ func marshalWallet(t *testing.T, v any) []byte {
 	return b
 }
 
+func TestWalletOn(t *testing.T) {
+	calls := 0
+	backend := stubWalletBackend{
+		addressFn: func(string) (string, error) { calls++; return "TAddr", nil },
+		balanceFn: func(string) (wallet.Account, error) { calls++; return wallet.Account{}, nil },
+	}
+	h := func(settings *stubWalletSettingsRepo) warpnet.WarpHandlerFunc {
+		return WalletOn(settings, ErrPeerWalletOff, StreamGetWalletHandler(ownerAuth(), walletKey(), backend))
+	}
+
+	t.Run("off refuses without touching the engine", func(t *testing.T) {
+		_, err := h(&stubWalletSettingsRepo{})([]byte(`{}`), nil)
+		if !errors.Is(err, ErrPeerWalletOff) || calls != 0 {
+			t.Fatalf("err = %v, engine calls = %d", err, calls)
+		}
+	})
+
+	t.Run("a settings read failure refuses too", func(t *testing.T) {
+		_, err := h(&stubWalletSettingsRepo{saved: domain.WalletSettings{Enabled: true}, err: errors.New("db closed")})([]byte(`{}`), nil)
+		if err == nil || calls != 0 {
+			t.Fatalf("err = %v, engine calls = %d", err, calls)
+		}
+	})
+
+	t.Run("on passes through", func(t *testing.T) {
+		if _, err := h(&stubWalletSettingsRepo{saved: domain.WalletSettings{Enabled: true}})([]byte(`{}`), nil); err != nil {
+			t.Fatal(err)
+		}
+		if calls == 0 {
+			t.Fatal("the wallet handler did not run")
+		}
+	})
+}
+
 func TestGetWalletHandler(t *testing.T) {
 	backend := stubWalletBackend{
 		addressFn: func(seed string) (string, error) {

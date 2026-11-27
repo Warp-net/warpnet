@@ -226,6 +226,7 @@ resulting from the use or misuse of this software.
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
               <button
+                  v-if="canSell"
                   @click="toggleSponsored"
                   class="text-lg mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
                   :class="[sponsored ? 'text-white bg-blue' : 'text-blue', {'opacity-50 cursor-not-allowed': !!poll}]"
@@ -340,6 +341,7 @@ import {pastedFiles} from "@/lib/clipboard";
 import {createTimelineMerger} from "@/lib/unified-timeline";
 import {isBridgedTweet, isBridgedUser, isOwnTweetEcho} from "@/lib/network";
 import {startQueuedOnboarding} from "@/lib/onboarding";
+import {walletOn} from "@/lib/wallet";
 
 const tweetByteLimit = 2048;
 // Bridged sources are polled much slower than the 10s local-timeline poll:
@@ -442,6 +444,10 @@ export default {
     },
   },
   computed: {
+    // Selling needs the wallet the buyers pay into.
+    canSell() {
+      return walletOn(this.profile);
+    },
     tweetLength() {
       return byteLength(this.tweet.text);
     },

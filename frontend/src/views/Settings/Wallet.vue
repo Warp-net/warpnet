@@ -11,12 +11,29 @@
         >
           <i class="fas fa-arrow-left text-blue"></i>
         </button>
-        <h1 class="text-xl font-bold ml-4">Wallet backend</h1>
+        <h1 class="text-xl font-bold ml-4">Wallet</h1>
       </div>
 
       <Loader :loading="loading" />
 
       <form v-if="!loading" @submit.prevent="save" class="p-5 space-y-4 max-w-xl">
+        <label class="flex items-start space-x-3">
+          <input
+            type="checkbox" v-model="settings.enabled" :disabled="saving"
+            @change="toggle(settings.enabled)"
+            class="mt-1" data-testid="wallet-enabled"
+          />
+          <span>
+            <span class="font-bold">Use the wallet</span>
+            <span class="block text-sm text-dark">
+              Pay for sponsored tweets, sell your own and send TRX and USDT.
+              While it is off the payment engine never starts, the Wallet tab is
+              hidden and the node tells others it takes no payments. Your
+              wallet is derived from your account, so turning it off loses nothing.
+            </span>
+          </span>
+        </label>
+
         <p class="text-sm text-dark">
           Which blockchain API and payment engine the wallet uses. Changes take
           effect after the node restarts.
@@ -94,6 +111,7 @@ export default {
   },
   methods: {
     async send(settings, message) {
+      let saved = false;
       this.savedMessage = '';
       this.saveError = false;
       this.saving = true;
@@ -101,6 +119,7 @@ export default {
         await warpnetService.updateWalletSettings(settings);
         this.load(await warpnetService.getWalletSettings());
         this.savedMessage = message;
+        saved = true;
       } catch (err) {
         console.error('Failed to save wallet settings:', err);
         this.savedMessage = 'Failed to save';
@@ -111,20 +130,29 @@ export default {
         if (this._savedTimer) clearTimeout(this._savedTimer);
         this._savedTimer = setTimeout(() => { this.savedMessage = ''; }, 3000);
       }
+      return saved;
     },
     load(saved) {
       this.settings = { ...saved };
       this.headers = Object.entries(saved.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
     },
-    save() {
+    formSettings() {
       const headers = Object.fromEntries(this.headers.split('\n')
         .map((line) => line.split(':'))
         .filter(([name, ...value]) => name.trim() && value.length)
         .map(([name, ...value]) => [name.trim(), value.join(':').trim()]));
-      return this.send({ ...this.settings, headers }, 'Settings saved');
+      return { ...this.settings, headers };
+    },
+    save() {
+      return this.send(this.formSettings(), 'Settings saved');
+    },
+    async toggle(enabled) {
+      if (!await this.send({ ...this.formSettings(), enabled }, enabled ? 'Wallet turned on' : 'Wallet turned off')) {
+        this.settings.enabled = !enabled;
+      }
     },
     reset() {
-      return this.send({}, 'Defaults restored');
+      return this.send({ enabled: !!this.settings.enabled }, 'Defaults restored');
     },
   },
   beforeUnmount() {

@@ -441,6 +441,7 @@ type NetworkSettings struct {
 }
 
 type WalletSettings struct {
+	Enabled    bool              `json:"enabled"`
 	Endpoint   string            `json:"endpoint"`
 	BinaryPath string            `json:"binary_path"`
 	Headers    map[string]string `json:"headers,omitempty"`

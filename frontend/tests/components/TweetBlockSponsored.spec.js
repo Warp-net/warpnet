@@ -98,7 +98,7 @@ beforeEach(() => {
   warpnetService.getProfile.mockResolvedValue({ id: 'author1', username: 'author', avatar_key: '' });
   warpnetService.getImage.mockResolvedValue(null);
   warpnetService.getSponsoredImage.mockResolvedValue(null);
-  warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer' });
+  warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer', network: 'testnet', wallet: true });
   warpnetService.getTweetStats.mockResolvedValue({ tweet_id: 't1' });
   warpnetService.hasReactor.mockResolvedValue(false);
   warpnetService.getReactorEmoji.mockResolvedValue('');
@@ -109,6 +109,24 @@ beforeEach(() => {
 });
 
 describe('TweetBlock sponsored tweet', () => {
+  it('offers to turn the wallet on instead of paying while it is off', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer', network: 'testnet', wallet: false });
+    const push = vi.fn();
+    render(TweetBlock, {
+      props: { tweet: teaser() },
+      global: {
+        mocks: { $filters: { timeago: () => 'just now' }, $router: { push } },
+        directives: { linkify: {} },
+      },
+    });
+
+    expect(await screen.findByTestId('unlock-wallet-off')).toHaveTextContent('Unlocking costs 1.5 USDT.');
+    expect(screen.queryByRole('button', { name: 'Unlock for 1.5 USDT' })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Turn on the wallet' }));
+    expect(push).toHaveBeenCalledWith({ name: 'SettingsWallet' });
+    expect(warpnetService.quoteSponsoredTweet).not.toHaveBeenCalled();
+  });
+
   it('shows a teaser as a locked card with its price', async () => {
     renderTweet(teaser());
 

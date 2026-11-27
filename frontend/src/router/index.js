@@ -26,6 +26,7 @@ import {createRouter, createWebHistory, isNavigationFailure, NavigationFailureTy
 import Root from "../views/Root.vue";
 import AuthMiddleware from "./auth.guard";
 import {warpnetService} from "@/service/service";
+import {walletOn} from "@/lib/wallet";
 
 const routes = [
   {
@@ -141,12 +142,16 @@ const routes = [
     component: () =>
       import(/* webpackChunkName: "wallet" */ "../views/Wallet.vue"),
     meta: { protected: true },
-    // The wallet ships on testnet only; on the production network the tab is
-    // hidden, so a hand-typed /wallet must not reach it either.
+    // The tab is hidden off testnet and while the wallet is turned off, so a
+    // hand-typed /wallet must not reach it either: on testnet it leads to the
+    // switch in Settings instead.
     beforeEnter: (to, from, next) => {
       const owner = warpnetService.getOwnerProfile();
-      if (owner && owner.network === "testnet") {
+      if (walletOn(owner)) {
         return next();
+      }
+      if (owner && owner.network === "testnet") {
+        return next({ name: "SettingsWallet" });
       }
       return next({ name: "Root" });
     },

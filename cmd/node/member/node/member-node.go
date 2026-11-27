@@ -814,7 +814,9 @@ func (m *MemberNode) sponsoredHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_SPONSORED_TWEET,
-			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.mediaRepo, r.copyRepo),
+			handler.WalletOn(r.settingsRepo, handler.ErrWalletOff,
+				handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.mediaRepo, r.copyRepo),
+			),
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
@@ -822,11 +824,15 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PRIVATE_POST_SPONSORED_ORDER,
-			handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m),
+			handler.WalletOn(r.settingsRepo, handler.ErrWalletOff,
+				handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m),
+			),
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_QUOTE,
-			handler.StreamGetOrderQuoteHandler(authRepo, m.privKey, m.walletClient, userRepo, m),
+			handler.WalletOn(r.settingsRepo, handler.ErrWalletOff,
+				handler.StreamGetOrderQuoteHandler(authRepo, m.privKey, m.walletClient, userRepo, m),
+			),
 		},
 		{
 			event.PUBLIC_POST_SPONSORED_ORDER,
@@ -848,49 +854,54 @@ func (m *MemberNode) sponsoredHandlers(
 }
 
 func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider, r *memberRepos) []warpnet.WarpStreamHandler {
+	on := func(h warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
+		return handler.WalletOn(r.settingsRepo, handler.ErrWalletOff, h)
+	}
 	//nolint:govet
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_GET_WALLET,
-			handler.StreamGetWalletHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamGetWalletHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_GET_WALLET_ADDRESS,
-			handler.StreamGetOwnWalletAddressHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamGetOwnWalletAddressHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_GET_WALLET_HISTORY,
-			handler.StreamGetWalletHistoryHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamGetWalletHistoryHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_GET_WALLET_KEY,
-			handler.StreamGetWalletKeyHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamGetWalletKeyHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_POST_WALLET_SEND,
-			handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_POST_WALLET_STAKE,
-			handler.StreamWalletStakeHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamWalletStakeHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_POST_WALLET_UNSTAKE,
-			handler.StreamWalletUnstakeHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamWalletUnstakeHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_POST_WALLET_WITHDRAW,
-			handler.StreamWalletWithdrawHandler(authRepo, m.privKey, m.walletClient),
+			on(handler.StreamWalletWithdrawHandler(authRepo, m.privKey, m.walletClient)),
 		},
 		{
 			event.PRIVATE_GET_WALLET_CONTACTS,
-			handler.StreamGetWalletContactsHandler(
+			on(handler.StreamGetWalletContactsHandler(
 				authRepo, m.privKey, m.walletClient, m.walletRepo, m.followRepo, m.userRepo, m,
-			),
+			)),
 		},
 		{
 			event.PUBLIC_GET_WALLET_ADDRESS,
-			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, r.settingsRepo),
+			handler.WalletOn(r.settingsRepo, handler.ErrPeerWalletOff,
+				handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, r.settingsRepo),
+			),
 		},
 	}
 }
@@ -954,7 +965,7 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_WALLET,
-			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo),
+			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo, m.walletClient),
 		},
 	}
 }

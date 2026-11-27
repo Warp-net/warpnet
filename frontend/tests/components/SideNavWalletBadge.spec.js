@@ -49,7 +49,7 @@ afterAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  warpnetService.getOwnerProfile.mockReturnValue({ user_id: OWNER_ID, username: 'Owner', network: 'testnet' });
+  warpnetService.getOwnerProfile.mockReturnValue({ user_id: OWNER_ID, username: 'Owner', network: 'testnet', wallet: true });
   warpnetService.getProfile.mockResolvedValue({ id: OWNER_ID, username: 'Owner' });
   warpnetService.getImage.mockResolvedValue('');
   warpnetService.getNotifications.mockResolvedValue({ notifications: [], unread_count: 0 });
@@ -136,6 +136,30 @@ describe('SideNav wallet badge', () => {
 
     expect(warpnetService.getWalletHistory.mock.calls.length).toBe(mounting);
     vi.useRealTimers();
+  });
+
+  it('hides the wallet and never asks for its history while it is turned off', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: OWNER_ID, username: 'Owner', network: 'testnet', wallet: false });
+    renderNav();
+    await waitFor(() => expect(warpnetService.getNotifications).toHaveBeenCalled());
+    expect(warpnetService.getWalletHistory).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Wallet')).toBeNull();
+  });
+
+  it('shows the wallet and marks where now is as soon as it is turned on', async () => {
+    let owner = { user_id: OWNER_ID, username: 'Owner', network: 'testnet', wallet: false };
+    let notify;
+    warpnetService.getOwnerProfile.mockImplementation(() => owner);
+    warpnetService.subscribeOwner.mockImplementation((cb) => { notify = cb; cb(owner); return () => {}; });
+    renderNav();
+    await waitFor(() => expect(warpnetService.getNotifications).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Wallet')).toBeNull();
+
+    owner = { ...owner, wallet: true };
+    notify(owner);
+    await waitFor(() => expect(screen.getByLabelText('Wallet')).toBeTruthy());
+    await waitFor(() => expect(localStorage.getItem(SEEN_KEY)).not.toBeNull());
+    expect(warpnetService.getWalletHistory).toHaveBeenCalled();
   });
 
   it('never asks for wallet history when the wallet is not offered', async () => {

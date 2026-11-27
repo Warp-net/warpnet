@@ -160,7 +160,7 @@ resulting from the use or misuse of this software.
           </p>
         </button>
         <button
-          v-if="profile.network === 'testnet'"
+          v-if="walletOn(profile)"
           @click="$router.push({ name: 'Wallet' })"
           :class="{ 'nav-active': $route.name === 'Wallet' }"
           class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
@@ -321,6 +321,7 @@ import QRCodeModal from "@/components/QRCodeModal.vue";
 import {warpnetService} from "@/service/service";
 import {startOnboarding} from "@/lib/onboarding";
 import {lockScreen, screenLock} from "@/lib/screen-lock";
+import {walletOn} from "@/lib/wallet";
 
 const walletPollEvery = 60000;
 const walletAssets = ["USDT", "TRX"];
@@ -387,12 +388,13 @@ export default {
     window.addEventListener("keyup", this._onDocKeyup);
   },
   methods: {
+    walletOn,
     // pollWallet badges the wallet icon with the transfers that arrived since
     // the tab was last opened. The first run only records where "now" is, so a
     // wallet with history does not open with a badge for transfers already seen,
     // and an empty wallet still gets a mark its first transfer lands after.
     async pollWallet() {
-      if (!this.profile || this.profile.network !== "testnet") return;
+      if (!walletOn(this.profile)) return;
       if (this.$route && this.$route.name === "Wallet") {
         this.markWalletSeen();
         return;
@@ -524,7 +526,11 @@ export default {
     this.unsubscribeOwner = warpnetService.subscribeOwner(async (owner) => {
       if (!owner) return;
       const prevAvatarKey = this.profile?.avatar_key;
+      const hadWallet = walletOn(this.profile);
       this.profile = { ...this.profile, ...owner };
+      if (!hadWallet && walletOn(this.profile)) {
+        this.pollWallet();
+      }
       if (owner.avatar_key && owner.avatar_key !== prevAvatarKey) {
         try {
           this.profile.avatar = await warpnetService.getImage({userId: this.profile.user_id, key: owner.avatar_key});

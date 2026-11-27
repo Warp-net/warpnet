@@ -147,6 +147,16 @@ resulting from the use or misuse of this software.
           <span v-if="unlockPending" class="text-xs text-dark" role="status">
             <i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Paid. The network is confirming it, the tweet opens by itself.
           </span>
+          <span v-else-if="!canPay" class="text-sm text-dark" data-testid="unlock-wallet-off">
+            Unlocking costs {{ tweet.price.amount }} USDT.
+            <button
+                v-if="isTestnet"
+                type="button"
+                @click.stop="$router.push({ name: 'SettingsWallet' })"
+                class="text-blue underline"
+            >Turn on the wallet</button>
+            <template v-else>Paying for tweets is not open on this network yet.</template>
+          </span>
           <button
               v-else
               type="button"
@@ -480,6 +490,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {watchOrder} from "@/lib/order-worker";
+import {walletOn} from "@/lib/wallet";
 import {extractYoutubeId} from "@/lib/youtube";
 import {createVideoURL, revokeVideoURL} from "@/lib/video";
 import {DEFAULT_REACTION} from "@/lib/emoji";
@@ -607,6 +618,12 @@ export default {
         return "This reply will be removed from your thread. This can't be undone.";
       }
       return "This tweet will be permanently deleted. This can't be undone.";
+    },
+    canPay() {
+      return walletOn(warpnetService.getOwnerProfile());
+    },
+    isTestnet() {
+      return warpnetService.getOwnerProfile()?.network === "testnet";
     },
     isLocked() {
       return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;

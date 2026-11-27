@@ -58,7 +58,26 @@ const (
 	ErrOrderLimit         warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
 	ErrWalletPayerTaken   warpnet.WarpError = "order: this wallet already paid for another buyer of this author"
 	ErrWalletPayerAddress warpnet.WarpError = "order: the paying wallet is not a TRON address in base58"
+	ErrWalletOff          warpnet.WarpError = "wallet: turned off in Settings"
+	ErrPeerWalletOff      warpnet.WarpError = "wallet: this user has no wallet turned on and takes no payments"
 )
+
+type WalletSwitch interface {
+	GetWalletSettings() (domain.WalletSettings, error)
+}
+
+func WalletOn(settings WalletSwitch, refusal error, h warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		ws, err := settings.GetWalletSettings()
+		if err != nil {
+			return nil, err
+		}
+		if !ws.Enabled {
+			return nil, refusal
+		}
+		return h(buf, s)
+	}
+}
 
 type WalletBackend interface {
 	Address(ctx context.Context, seed string) (string, error)

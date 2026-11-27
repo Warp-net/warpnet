@@ -438,6 +438,11 @@ export const warpnetService = {
         } catch (err) {
             console.error("Failed to fetch owner profile:", err)
         }
+        try {
+            await this.getWalletSettings()
+        } catch (err) {
+            console.error("Failed to read whether the wallet is on:", err)
+        }
 
         // The QR carries the full AuthNodeInfo envelope, gzip-compressed at
         // maximum level (9) and Base45-encoded so it fits in a QR alphanumeric
@@ -1355,13 +1360,26 @@ export const warpnetService = {
             path: PRIVATE_GET_SETTINGS_WALLET,
             body: {},
         });
+        if (resp && !resp.code) {
+            this.setWalletSwitch(resp.enabled);
+        }
         return resp || {};
+    },
+
+    // The owner profile carries whether the wallet is turned on, so the
+    // sidebar, the router and tweets can hide it without asking the node.
+    setWalletSwitch(enabled) {
+        const owner = this.getOwnerProfile();
+        if (owner && owner.wallet !== !!enabled) {
+            this.setOwnerProfile({...owner, wallet: !!enabled});
+        }
     },
 
     async updateWalletSettings(settings) {
         const resp = await this.sendToNode({
             path: PRIVATE_POST_SETTINGS_WALLET,
             body: {
+                enabled: !!settings.enabled,
                 endpoint: String(settings.endpoint ?? '').trim(),
                 binary_path: String(settings.binary_path ?? '').trim(),
                 headers: settings.headers ?? {},
@@ -1370,6 +1388,7 @@ export const warpnetService = {
         if (!resp || resp.code || !('endpoint' in resp)) {
             throw new Error(resp?.message || 'Failed to save wallet settings');
         }
+        this.setWalletSwitch(resp.enabled);
         return resp;
     },
 

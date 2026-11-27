@@ -79,7 +79,7 @@ export default {
         { name: 'SettingsSponsored', label: 'Sponsored tweets', hint: 'Staked TRX your buyers must hold', icon: 'fas fa-pepper-hot' },
         { name: 'SettingsRateLimiting', label: 'Rate limiting', hint: 'Network, discovery and stream limits', icon: 'fas fa-tachometer-alt' },
         { name: 'SettingsNetwork', label: 'Network', hint: 'Listen address and bootstrap peers', icon: 'fas fa-server' },
-        { name: 'SettingsWallet', label: 'Wallet backend', hint: 'Blockchain API and payment engine', icon: 'fas fa-wallet' },
+        { name: 'SettingsWallet', label: 'Wallet', hint: 'Turn the wallet on, blockchain API and payment engine', icon: 'fas fa-wallet' },
       ],
     };
   },

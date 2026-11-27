@@ -511,6 +511,10 @@ func (s *stubWalletSettingsRepo) SetWalletSettings(ws domain.WalletSettings) err
 	return s.err
 }
 
+type stubWalletStopper struct{ closed int }
+
+func (s *stubWalletStopper) Close() { s.closed++ }
+
 func TestStreamWalletSettingsHandlers(t *testing.T) {
 	defaults := domain.WalletSettings{Endpoint: "https://api.trongrid.io"}
 	t.Run("get", func(t *testing.T) {
@@ -526,13 +530,28 @@ func TestStreamWalletSettingsHandlers(t *testing.T) {
 
 	t.Run("update", func(t *testing.T) {
 		repo := &stubWalletSettingsRepo{}
-		in := domain.WalletSettings{Endpoint: "https://nile.trongrid.io", BinaryPath: "/opt/engine"}
-		resp, err := StreamUpdateWalletSettingsHandler(repo)(marshal(t, in), nil)
+		engine := &stubWalletStopper{}
+		in := domain.WalletSettings{Enabled: true, Endpoint: "https://nile.trongrid.io", BinaryPath: "/opt/engine"}
+		resp, err := StreamUpdateWalletSettingsHandler(repo, engine)(marshal(t, in), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if !reflect.DeepEqual(repo.saved, in) || !reflect.DeepEqual(domain.WalletSettings(resp.(event.GetWalletSettingsResponse)), in) {
 			t.Fatalf("unexpected saved %+v, response %+v", repo.saved, resp)
+		}
+		if engine.closed != 0 {
+			t.Fatalf("turning the wallet on must not stop the engine")
+		}
+	})
+
+	t.Run("turning the wallet off stops the payment engine", func(t *testing.T) {
+		repo := &stubWalletSettingsRepo{saved: domain.WalletSettings{Enabled: true}}
+		engine := &stubWalletStopper{}
+		if _, err := StreamUpdateWalletSettingsHandler(repo, engine)(marshal(t, domain.WalletSettings{}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if repo.saved.Enabled || engine.closed != 1 {
+			t.Fatalf("expected the wallet saved off and the engine stopped once, got %+v, %d", repo.saved, engine.closed)
 		}
 	})
 
@@ -540,7 +559,7 @@ func TestStreamWalletSettingsHandlers(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := &stubWalletSettingsRepo{}
 			in := domain.WalletSettings{Endpoint: endpoint}
-			if _, err := StreamUpdateWalletSettingsHandler(repo)(marshal(t, in), nil); err == nil {
+			if _, err := StreamUpdateWalletSettingsHandler(repo, &stubWalletStopper{})(marshal(t, in), nil); err == nil {
 				t.Fatalf("expected validation error for %q", endpoint)
 			}
 			if !reflect.DeepEqual(repo.saved, domain.WalletSettings{}) {

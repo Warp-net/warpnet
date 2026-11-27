@@ -93,7 +93,7 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'owner1', username: 'Owner' });
+  warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'owner1', username: 'Owner', network: 'testnet', wallet: true });
   warpnetService.getProfile.mockResolvedValue({ id: 'owner1', username: 'Owner' });
   warpnetService.getImage.mockResolvedValue('');
   warpnetService.getMyTimeline.mockResolvedValue([]);
@@ -459,6 +459,13 @@ describe('Home composer file drop', () => {
 });
 
 describe('Home sponsored composer', () => {
+  it('offers no sponsored tweet while the wallet is off', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'owner1', username: 'Owner', network: 'testnet', wallet: false });
+    renderHome();
+    await screen.findByLabelText('Compose a tweet');
+    expect(screen.queryByRole('button', { name: 'Sponsored tweet' })).not.toBeInTheDocument();
+  });
+
   const composeSponsored = async (price) => {
     renderHome();
     const box = await screen.findByLabelText('Compose a tweet');

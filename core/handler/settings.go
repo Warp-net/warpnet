@@ -73,6 +73,10 @@ type WalletSettingsStorer interface {
 	SetWalletSettings(s domain.WalletSettings) error
 }
 
+type WalletStopper interface {
+	Close()
+}
+
 // SettingsAuthStorer resolves the local node owner.
 type SettingsAuthStorer interface {
 	GetOwner() domain.Owner
@@ -291,6 +295,7 @@ func StreamGetWalletSettingsHandler(
 
 func StreamUpdateWalletSettingsHandler(
 	repo WalletSettingsStorer,
+	engine WalletStopper,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateWalletSettingsEvent
@@ -302,6 +307,9 @@ func StreamUpdateWalletSettingsHandler(
 		}
 		if err := repo.SetWalletSettings(ev); err != nil {
 			return nil, err
+		}
+		if !ev.Enabled {
+			engine.Close()
 		}
 		return event.GetWalletSettingsResponse(ev), nil
 	}
