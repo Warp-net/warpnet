@@ -196,8 +196,8 @@
           <p class="text-dark text-sm uppercase tracking-wide mb-3">History</p>
           <Loader :loading="loadingHistory" />
           <p v-if="historyError" class="text-red-700">{{ historyError }}</p>
-          <p v-else-if="!loadingHistory && !history.length" class="text-dark">No transfers yet.</p>
-          <div v-for="t in history" :key="t.tx" class="flex items-center justify-between border-b border-lighter py-2 last:border-0">
+          <p v-else-if="!loadingHistory && !shownHistory.length" class="text-dark">No transfers yet.</p>
+          <div v-for="t in shownHistory" :key="t.tx" class="flex items-center justify-between border-b border-lighter py-2 last:border-0">
             <div class="min-w-0">
               <p :class="t.incoming ? 'text-green-700' : 'text-dark'" class="font-semibold">
                 {{ t.incoming ? '+' : '−' }}{{ format(t.value, assetDecimals(t.asset)) }} {{ t.asset || wallet.token }}
@@ -206,6 +206,16 @@
               <p v-if="t.timestamp" class="text-dark text-xs">{{ when(t.timestamp) }}</p>
             </div>
             <a :href="scan('tx', t.tx)" target="_blank" rel="noopener" class="text-blue text-sm ml-3 shrink-0">view</a>
+          </div>
+          <div v-if="smallCount" class="mt-3 text-sm text-dark">
+            <p>
+              {{ smallCount }} tiny transfer{{ smallCount === 1 ? '' : 's' }} {{ showSmall ? 'shown' : 'hidden' }}.
+              <button @click="showSmall = !showSmall" class="text-blue underline ml-1">{{ showSmall ? 'Hide' : 'Show' }}</button>
+            </p>
+            <p v-if="showSmall" class="text-xs mt-1">
+              Strangers send tiny or zero amounts from an address made to look like one you use, hoping you copy it from here.
+              Take an address from its owner, never from this list.
+            </p>
           </div>
         </div>
 
@@ -248,6 +258,7 @@ const historyPollTries = 6;
 const minStake = 1000000n;
 const stakeSettleAfter = 6000;
 const feeReserve = { mainnet: 35000000n, testnet: 10000000n };
+const tinyIncoming = { TRX: 1000000n, USDT: 100000n };
 
 const SCAN = {
   testnet: "https://nile.tronscan.org/#",
@@ -273,6 +284,7 @@ export default {
       wallet: {address: "", usdt_balance: "0", trx_balance: "0", staked: "0", unstaking: [], decimals: 6, network: "", token: ""},
       qr: "",
       history: [],
+      showSmall: false,
       contacts: [],
       contactsTimer: null,
       historyTimer: null,
@@ -308,6 +320,13 @@ export default {
     },
     hasTrx() {
       return this.units(this.wallet.trx_balance) > 0n;
+    },
+    smallCount() {
+      return this.history.filter((t) => this.isTiny(t)).length;
+    },
+    shownHistory() {
+      const rows = this.showSmall ? this.history : this.history.filter((t) => !this.isTiny(t));
+      return rows.slice(0, historyRows);
     },
     assets() {
       return [this.wallet.token || "USDT", nativeCoin];
@@ -375,6 +394,13 @@ export default {
     },
     when(ms) {
       return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    },
+    isTiny(t) {
+      const value = this.units(t.value);
+      if (value === 0n) return true;
+      if (!t.incoming) return false;
+      const floor = tinyIncoming[t.asset || this.wallet.token] ?? 0n;
+      return value < floor;
     },
     units(value) {
       try {
@@ -446,8 +472,7 @@ export default {
       this.historyError = "";
       this.history = answered
         .flatMap((r) => r.value || [])
-        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-        .slice(0, historyRows);
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
     watchForTransfer(tx) {
       clearTimeout(this.historyTimer);

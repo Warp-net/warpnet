@@ -336,6 +336,63 @@ describe('Wallet.vue', () => {
     expect(when).toMatch(/2026/);
   });
 
+  it('hides tiny incoming and zero-value transfers until asked, and warns when they are shown', async () => {
+    warpnetService.getWalletHistory.mockImplementation(async (_limit, asset) =>
+      asset === 'TRX'
+        ? [
+            { tx: 'trxdust', asset: 'TRX', from: 'TPoison', to: wallet.address, value: '6', timestamp: 500, incoming: true },
+            { tx: 'trxreal', asset: 'TRX', from: 'TFaucet', to: wallet.address, value: '1000000', timestamp: 100, incoming: true },
+          ]
+        : [
+            { tx: 'usdtdust', asset: 'USDT', from: 'TPoison', to: wallet.address, value: '99999', timestamp: 400, incoming: true },
+            { tx: 'usdtzero', asset: 'USDT', from: wallet.address, to: 'TPoison', value: '0', timestamp: 300, incoming: false },
+            { tx: 'usdtreal', asset: 'USDT', from: 'TSome', to: wallet.address, value: '100000', timestamp: 200, incoming: true },
+          ],
+    );
+    renderWallet();
+    await waitFor(() => expect(screen.getByText(line(/^\+0\.1 USDT$/))).toBeTruthy());
+    expect(screen.getByText(line(/^\+1 TRX$/))).toBeTruthy();
+    expect(screen.queryByText(line(/^\+0\.000006 TRX$/))).toBeNull();
+    expect(screen.queryByText(line(/^\+0\.099999 USDT$/))).toBeNull();
+    expect(screen.queryByText(line(/^−0 USDT$/))).toBeNull();
+    expect(screen.queryByText(/never from this list/)).toBeNull();
+    expect(screen.getByText(line(/^3 tiny transfers hidden\. Show$/))).toBeTruthy();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(screen.getByText(line(/^\+0\.000006 TRX$/))).toBeTruthy();
+    expect(screen.getByText(line(/^\+0\.099999 USDT$/))).toBeTruthy();
+    expect(screen.getByText(line(/^−0 USDT$/))).toBeTruthy();
+    expect(screen.getByText(/never from this list/)).toBeTruthy();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    expect(screen.queryByText(line(/^\+0\.000006 TRX$/))).toBeNull();
+  });
+
+  it('keeps small payments the owner sent', async () => {
+    warpnetService.getWalletHistory.mockImplementation(async (_limit, asset) =>
+      asset === 'TRX'
+        ? [{ tx: 'trxout', asset: 'TRX', from: wallet.address, to: 'TFriend', value: '1', timestamp: 200, incoming: false }]
+        : [],
+    );
+    renderWallet();
+    await waitFor(() => expect(screen.getByText(line(/^−0\.000001 TRX$/))).toBeTruthy());
+    expect(screen.queryByText(/tiny transfer/)).toBeNull();
+  });
+
+  it('does not let a flood of dust push real transfers off the list', async () => {
+    const dust = Array.from({ length: 25 }, (_, i) => (
+      { tx: 'dust' + i, asset: 'USDT', from: 'TPoison', to: wallet.address, value: '1', timestamp: 1000 + i, incoming: true }
+    ));
+    warpnetService.getWalletHistory.mockImplementation(async (_limit, asset) =>
+      asset === 'TRX'
+        ? [{ tx: 'trxreal', asset: 'TRX', from: 'TFaucet', to: wallet.address, value: '5000000', timestamp: 10, incoming: true }]
+        : dust,
+    );
+    renderWallet();
+    await waitFor(() => expect(screen.getByText(line(/^\+5 TRX$/))).toBeTruthy());
+    expect(screen.getByText(line(/^25 tiny transfers hidden\. Show$/))).toBeTruthy();
+  });
+
   it('says so when neither history answers', async () => {
     warpnetService.getWalletHistory.mockRejectedValue(new Error('node unreachable'));
     renderWallet();
