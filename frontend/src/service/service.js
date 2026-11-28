@@ -1654,7 +1654,9 @@ export const warpnetService = {
     // sendFunds moves USDT by default; pass asset "TRX" for the native coin.
     async sendFunds(to, amount, asset) {
         const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount, asset: asset || "" } }
-        return await this.sendToNode(request)
+        const resp = await this.sendToNode(request)
+        if (!resp || resp.code || !resp.tx) throw new Error(resp?.message || "Couldn't send.")
+        return resp
     },
     async stakeTrx(amount) {
         const resp = await this.sendToNode({ path: PRIVATE_POST_WALLET_STAKE, body: { amount } })
