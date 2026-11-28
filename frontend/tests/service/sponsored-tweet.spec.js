@@ -13,7 +13,7 @@ import { Call } from '@/lib/transport';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.spyOn(warpnetService, 'getOwnerProfile').mockReturnValue({ user_id: 'owner1', username: 'Owner', node_id: 'node-owner' });
+  vi.spyOn(warpnetService, 'getOwnerProfile').mockReturnValue({ user_id: 'owner1', username: 'Owner', node_id: 'node-owner', network: 'testnet', wallet: true });
 });
 
 describe('createTweet with a price', () => {

@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -434,6 +435,15 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 		}
 		if !notified {
 			t.Error("expected the owner to be notified")
+		}
+	})
+
+	t.Run("rejects a priced reply", func(t *testing.T) {
+		h := build(localParent, stubModerationNotifier{})
+		ev := makeReply()
+		ev.Price = &domain.Price{Amount: "1", Units: big.NewInt(1000000)}
+		if _, err := h(marshal(t, ev), conn); err == nil || !strings.Contains(err.Error(), "a reply cannot be sponsored") {
+			t.Fatalf("expected a sponsored reply to be refused, got %v", err)
 		}
 	})
 

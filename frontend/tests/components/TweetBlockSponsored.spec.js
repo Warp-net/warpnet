@@ -21,6 +21,7 @@ vi.mock('@/service/service', () => ({
     getSponsoredTweet: vi.fn(),
     quoteSponsoredTweet: vi.fn(),
     getCopyBuyer: vi.fn(),
+    turnWalletOn: vi.fn(),
   },
 }));
 
@@ -109,22 +110,52 @@ beforeEach(() => {
 });
 
 describe('TweetBlock sponsored tweet', () => {
-  it('offers to turn the wallet on instead of paying while it is off', async () => {
-    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer', network: 'testnet', wallet: false });
-    const push = vi.fn();
-    render(TweetBlock, {
-      props: { tweet: teaser() },
-      global: {
-        mocks: { $filters: { timeago: () => 'just now' }, $router: { push } },
-        directives: { linkify: {} },
-      },
-    });
+  it('asks to turn the wallet on before showing the bill, then shows it', async () => {
+    const owner = { user_id: 'viewer1', node_id: 'node-viewer', network: 'testnet', wallet: false };
+    warpnetService.getOwnerProfile.mockImplementation(() => owner);
+    warpnetService.turnWalletOn.mockImplementation(async () => { owner.wallet = true; return { enabled: true }; });
+    renderTweet(teaser());
 
-    expect(await screen.findByTestId('unlock-wallet-off')).toHaveTextContent('Unlocking costs 1.5 USDT.');
-    expect(screen.queryByRole('button', { name: 'Unlock for 1.5 USDT' })).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole('button', { name: 'Turn on the wallet' }));
-    expect(push).toHaveBeenCalledWith({ name: 'SettingsWallet' });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
+    expect(await screen.findByText('Turn on the wallet?')).toBeInTheDocument();
     expect(warpnetService.quoteSponsoredTweet).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+
+    expect(await screen.findByRole('table', { name: 'What the tweet costs' })).toBeInTheDocument();
+    expect(warpnetService.turnWalletOn).toHaveBeenCalledTimes(1);
+    expect(warpnetService.quoteSponsoredTweet).toHaveBeenCalledTimes(1);
+  });
+
+  it('neither pays nor quotes when the reader keeps the wallet off', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer', network: 'testnet', wallet: false });
+    renderTweet(teaser());
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByText('Turn on the wallet?')).not.toBeInTheDocument());
+    expect(warpnetService.turnWalletOn).not.toHaveBeenCalled();
+    expect(warpnetService.quoteSponsoredTweet).not.toHaveBeenCalled();
+    expect(warpnetService.orderSponsoredTweet).not.toHaveBeenCalled();
+  });
+
+  it('does not offer to pay where sponsored payments are not open', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer', network: 'warpnet', wallet: true });
+    renderTweet(teaser());
+
+    expect(await screen.findByTestId('unlock-closed')).toHaveTextContent('not open on this network yet');
+    expect(screen.queryByRole('button', { name: 'Unlock for 1.5 USDT' })).not.toBeInTheDocument();
+  });
+
+  it('says plainly that an author with the wallet off takes no payment', async () => {
+    warpnetService.quoteSponsoredTweet.mockRejectedValue(new Error('order: the author has the wallet turned off and takes no payments'));
+    renderTweet(teaser());
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
+
+    expect(await screen.findByText('The author has the wallet turned off and takes no payments')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pay' })).toBeDisabled();
   });
 
   it('shows a teaser as a locked card with its price', async () => {

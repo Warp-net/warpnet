@@ -811,6 +811,14 @@ func TestStreamGetOrderQuoteHandler(t *testing.T) {
 		}, resp)
 	})
 
+	t.Run("an author with the wallet off is refused as an order", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter"}
+		author := &answeringAuthor{t: t, reply: event.ResponseError{Code: 500, Message: ErrPeerWalletOff.Error()}}
+		_, err := newHandler(w, author)(marshal(t, event.GetOrderQuoteEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)
+		assert.ErrorIs(t, err, ErrAuthorWalletOff)
+		assert.Empty(t, w.quotes)
+	})
+
 	t.Run("a network without a splitter has nothing to quote", func(t *testing.T) {
 		w := &stubSponsoredWallet{}
 		_, err := newHandler(w, authorNode(t, noVerify))(marshal(t, event.GetOrderQuoteEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)

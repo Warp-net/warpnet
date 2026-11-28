@@ -57,4 +57,26 @@ describe('wallet switch', () => {
 
     expect(warpnetService.getOwnerProfile()).toEqual(owner);
   });
+
+  it('turns the wallet on keeping the endpoint and headers the owner set', async () => {
+    Call.mockResolvedValueOnce({ body: { enabled: false, endpoint: 'https://nile.example', binary_path: '', headers: { 'TRON-PRO-API-KEY': 'k' } } })
+      .mockResolvedValueOnce({ body: { enabled: true, endpoint: 'https://nile.example', binary_path: '', headers: { 'TRON-PRO-API-KEY': 'k' } } });
+
+    await warpnetService.turnWalletOn();
+
+    expect(Call.mock.calls[1][0].body).toEqual({ enabled: true, endpoint: 'https://nile.example', binary_path: '', headers: { 'TRON-PRO-API-KEY': 'k' } });
+    expect(warpnetService.getOwnerProfile().wallet).toBe(true);
+  });
+
+  it('will not turn the wallet on over settings it could not read', async () => {
+    Call.mockResolvedValue({ body: { code: 500, message: 'not attached server node' } });
+
+    await expect(warpnetService.turnWalletOn()).rejects.toThrow();
+    expect(Call).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to publish a priced tweet while the wallet is off', async () => {
+    await expect(warpnetService.createTweet({ text: 'members only', price: '1500000' })).rejects.toThrow('Turn on the wallet');
+    expect(Call).not.toHaveBeenCalled();
+  });
 });

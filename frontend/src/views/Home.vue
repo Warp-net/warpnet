@@ -226,7 +226,7 @@ resulting from the use or misuse of this software.
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
               <button
-                  v-if="canSell"
+                  v-if="offersSponsored"
                   @click="toggleSponsored"
                   class="text-lg mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
                   :class="[sponsored ? 'text-white bg-blue' : 'text-blue', {'opacity-50 cursor-not-allowed': !!poll}]"
@@ -327,6 +327,13 @@ resulting from the use or misuse of this software.
         @close="showImportModal = false"
         @imported="onTweetsImported"
     />
+
+    <WalletSwitchDialog
+        :show="askWallet"
+        reason="Readers pay for a sponsored tweet into your wallet, so it cannot be published while the wallet is off."
+        @on="onWalletOn"
+        @cancel="askWallet = false"
+    />
   </div>
 </template>
 
@@ -385,6 +392,7 @@ export default {
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     InfoOverlay: defineAsyncComponent(() => import('@/components/InfoOverlay.vue')),
     ImportTweetsModal: defineAsyncComponent(() => import('@/components/ImportTweetsModal.vue')),
+    WalletSwitchDialog: defineAsyncComponent(() => import('@/components/WalletSwitchDialog.vue')),
     EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
   },
   data() {
@@ -416,6 +424,7 @@ export default {
       showFileDropInput: false,
       poll: null,
       sponsored: null,
+      askWallet: false,
     };
   },
   watch: {
@@ -444,9 +453,10 @@ export default {
     },
   },
   computed: {
-    // Selling needs the wallet the buyers pay into.
-    canSell() {
-      return walletOn(this.profile);
+    // Sponsored tweets are paid in testnet USDT; selling one also needs the
+    // wallet turned on, which the button asks for.
+    offersSponsored() {
+      return !!this.profile && this.profile.network === 'testnet';
     },
     tweetLength() {
       return byteLength(this.tweet.text);
@@ -711,7 +721,20 @@ export default {
       this.poll.options.splice(index, 1);
     },
     toggleSponsored() {
-      this.sponsored = this.sponsored ? null : {price: ''};
+      if (this.sponsored) {
+        this.sponsored = null;
+        return;
+      }
+      if (!walletOn(this.profile)) {
+        this.askWallet = true;
+        return;
+      }
+      this.sponsored = {price: ''};
+    },
+    onWalletOn() {
+      this.askWallet = false;
+      this.profile = {...this.profile, wallet: true};
+      this.sponsored = {price: ''};
     },
     // The wire carries an absolute deadline, not a duration, so every node
     // reading the tweet closes the poll at the same moment.
@@ -725,6 +748,10 @@ export default {
     },
     async addNewTweet() {
       if (this.posting || !this.tweet.text.trim() || !this.pollReady || !this.sponsoredReady) return;
+      if (this.sponsored && !walletOn(this.profile)) {
+        this.askWallet = true;
+        return;
+      }
       const draftText = this.tweet.text;
       const draftImages = this.imageAttachments;
       const price = this.sponsored ? toPriceUnits(this.sponsored.price) : '';

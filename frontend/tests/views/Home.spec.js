@@ -18,6 +18,7 @@ vi.mock('@/service/service', () => ({
     consumePendingDeepLink: vi.fn(),
     getNodeInfo: vi.fn(),
     createTweet: vi.fn(),
+    turnWalletOn: vi.fn(),
     uploadImage: vi.fn(),
     uploadVideo: vi.fn(),
   },
@@ -459,12 +460,43 @@ describe('Home composer file drop', () => {
 });
 
 describe('Home sponsored composer', () => {
-  it('offers no sponsored tweet while the wallet is off', async () => {
+  it('asks to turn the wallet on before a tweet can be sponsored', async () => {
+    const owner = { user_id: 'owner1', username: 'Owner', network: 'testnet', wallet: false };
+    warpnetService.getOwnerProfile.mockReturnValue(owner);
+    warpnetService.turnWalletOn.mockResolvedValue({ enabled: true });
+    renderHome();
+    await screen.findByLabelText('Compose a tweet');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Sponsored tweet' }));
+    expect(await screen.findByText('Turn on the wallet?')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Price')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+
+    expect(await screen.findByLabelText('Price')).toBeInTheDocument();
+    expect(warpnetService.turnWalletOn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the tweet free when the owner keeps the wallet off', async () => {
     warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'owner1', username: 'Owner', network: 'testnet', wallet: false });
+    renderHome();
+    await screen.findByLabelText('Compose a tweet');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Sponsored tweet' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByText('Turn on the wallet?')).not.toBeInTheDocument());
+    expect(screen.queryByLabelText('Price')).not.toBeInTheDocument();
+    expect(warpnetService.turnWalletOn).not.toHaveBeenCalled();
+  });
+
+  it('offers no sponsored tweet off testnet', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'owner1', username: 'Owner', network: 'warpnet', wallet: true });
     renderHome();
     await screen.findByLabelText('Compose a tweet');
     expect(screen.queryByRole('button', { name: 'Sponsored tweet' })).not.toBeInTheDocument();
   });
+
 
   const composeSponsored = async (price) => {
     renderHome();

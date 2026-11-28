@@ -147,20 +147,13 @@ resulting from the use or misuse of this software.
           <span v-if="unlockPending" class="text-xs text-dark" role="status">
             <i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Paid. The network is confirming it, the tweet opens by itself.
           </span>
-          <span v-else-if="!canPay" class="text-sm text-dark" data-testid="unlock-wallet-off">
-            Unlocking costs {{ tweet.price.amount }} USDT.
-            <button
-                v-if="isTestnet"
-                type="button"
-                @click.stop="$router.push({ name: 'SettingsWallet' })"
-                class="text-blue underline"
-            >Turn on the wallet</button>
-            <template v-else>Paying for tweets is not open on this network yet.</template>
+          <span v-else-if="!isTestnet" class="text-sm text-dark" data-testid="unlock-closed">
+            Unlocking costs {{ tweet.price.amount }} USDT. Paying for tweets is not open on this network yet.
           </span>
           <button
               v-else
               type="button"
-              @click.stop="openUnlock()"
+              @click.stop="startUnlock()"
               :disabled="unlocking"
               class="h-9 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
               :class="{'opacity-50 cursor-not-allowed': unlocking}"
@@ -169,6 +162,12 @@ resulting from the use or misuse of this software.
             <span v-else>Unlock for {{ tweet.price.amount }} USDT</span>
           </button>
         </div>
+        <WalletSwitchDialog
+          :show="askWallet"
+          reason="You pay for a sponsored tweet from your wallet, so it has to be turned on first."
+          @on="onWalletOn"
+          @cancel="askWallet = false"
+        />
         <ConfirmDialog
           :show="showUnlockConfirm"
           title="Unlock this tweet?"
@@ -534,6 +533,7 @@ export default {
     QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
     ReportDialog: defineAsyncComponent(() => import('./ReportDialog.vue')),
     ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
+    WalletSwitchDialog: defineAsyncComponent(() => import('./WalletSwitchDialog.vue')),
     YoutubeEmbed: defineAsyncComponent(() => import('./YoutubeEmbed.vue')),
     PollWidget: defineAsyncComponent(() => import('./PollWidget.vue')),
     ReactionBar: defineAsyncComponent(() => import('./ReactionBar.vue')),
@@ -549,6 +549,7 @@ export default {
       showReportDialog: false,
       showDeleteConfirm: false,
       showUnlockConfirm: false,
+      askWallet: false,
       unlocking: false,
       unlockPending: false,
       quote: null,
@@ -618,9 +619,6 @@ export default {
         return "This reply will be removed from your thread. This can't be undone.";
       }
       return "This tweet will be permanently deleted. This can't be undone.";
-    },
-    canPay() {
-      return walletOn(warpnetService.getOwnerProfile());
     },
     isTestnet() {
       return warpnetService.getOwnerProfile()?.network === "testnet";
@@ -736,6 +734,17 @@ export default {
       } catch (err) {
         console.warn(`failed to load retweeter profile [${by}]`, err);
       }
+    },
+    startUnlock() {
+      if (!walletOn(warpnetService.getOwnerProfile())) {
+        this.askWallet = true;
+        return;
+      }
+      this.openUnlock();
+    },
+    onWalletOn() {
+      this.askWallet = false;
+      this.openUnlock();
     },
     async openUnlock() {
       this.showUnlockConfirm = true;

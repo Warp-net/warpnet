@@ -29,6 +29,7 @@ import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop, SelectNetwork, Netw
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {isOwnTweetEcho} from "@/lib/network";
 import {resetScreenLock} from "@/lib/screen-lock";
+import {walletOn} from "@/lib/wallet";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -1375,6 +1376,16 @@ export const warpnetService = {
         }
     },
 
+    // turnWalletOn flips only the switch and keeps the endpoint and headers the
+    // owner set, so it refuses rather than save over settings it could not read.
+    async turnWalletOn() {
+        const current = await this.getWalletSettings();
+        if (!current || current.code || !('endpoint' in current)) {
+            throw new Error(current?.message || 'Failed to read the wallet settings');
+        }
+        return this.updateWalletSettings({...current, enabled: true});
+    },
+
     async updateWalletSettings(settings) {
         const resp = await this.sendToNode({
             path: PRIVATE_POST_SETTINGS_WALLET,
@@ -1909,6 +1920,9 @@ export const warpnetService = {
     // price is in the wallet token's base units.
     async createTweet({text, imageKeys, videoKey, poll, price}) {
         const owner = this.getOwnerProfile()
+        if (price && !walletOn(owner)) {
+            throw new Error('Turn on the wallet to publish a sponsored tweet: buyers pay into it.')
+        }
 
         const request ={
             path: price ? PRIVATE_POST_SPONSORED_TWEET : PRIVATE_POST_TWEET,

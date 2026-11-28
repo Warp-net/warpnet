@@ -537,7 +537,10 @@ func authorAddress(streamer SponsoredStreamer, author domain.User, network, paye
 		return "", "", err
 	}
 	var possibleError event.ResponseError
-	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
+	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message == ErrPeerWalletOff.Error() {
+		return "", "", ErrAuthorWalletOff
+	}
+	if possibleError.Message != "" {
 		return "", "", warpnet.WarpError(possibleError.Message)
 	}
 	var answer event.WalletAddressResponse

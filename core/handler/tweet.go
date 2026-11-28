@@ -357,6 +357,9 @@ func StreamNewReplyHandler(
 		if !ev.IsReply() {
 			return nil, ErrNotAReply
 		}
+		if ev.IsSponsored() {
+			return nil, warpnet.WarpError("sponsored tweet: a reply cannot be sponsored")
+		}
 		if ev.ParentUserId == nil || *ev.ParentUserId == "" {
 			return nil, ErrForeignThread
 		}

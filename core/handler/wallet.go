@@ -60,6 +60,7 @@ const (
 	ErrWalletPayerAddress warpnet.WarpError = "order: the paying wallet is not a TRON address in base58"
 	ErrWalletOff          warpnet.WarpError = "wallet: turned off in Settings"
 	ErrPeerWalletOff      warpnet.WarpError = "wallet: this user has no wallet turned on and takes no payments"
+	ErrAuthorWalletOff    warpnet.WarpError = "order: the author has the wallet turned off and takes no payments"
 )
 
 type WalletSwitch interface {
