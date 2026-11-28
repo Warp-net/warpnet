@@ -61,6 +61,8 @@ const (
 	ErrWalletOff          warpnet.WarpError = "wallet: turned off in Settings"
 	ErrPeerWalletOff      warpnet.WarpError = "wallet: this user has no wallet turned on and takes no payments"
 	ErrAuthorWalletOff    warpnet.WarpError = "order: the author has the wallet turned off and takes no payments"
+	ErrRecipientWalletOff warpnet.WarpError = "wallet: the recipient has the wallet turned off; nothing was sent"
+	ErrRecipientUnknown   warpnet.WarpError = "wallet: the recipient's node did not confirm the wallet is on; nothing was sent"
 )
 
 type WalletSwitch interface {
@@ -163,7 +165,14 @@ func StreamGetOwnWalletAddressHandler(auth WalletOwnerStorer, identityKey ed2551
 	}
 }
 
-func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
+func StreamWalletSendHandler(
+	auth WalletOwnerStorer,
+	identityKey ed25519.PrivateKey,
+	backend WalletBackend,
+	wallets WalletAddressStorer,
+	users WalletUserFetcher,
+	streamer WalletStreamer,
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.WalletSendEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -179,7 +188,11 @@ func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.Private
 		if err != nil {
 			return nil, err
 		}
-		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
+		owner := auth.GetOwner()
+		if err := checkRecipientWallet(backend.Network(), ev.To, owner, wallets, users, streamer); err != nil {
+			return nil, err
+		}
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -320,6 +333,7 @@ const (
 
 type WalletAddressStorer interface {
 	SetAddress(chain, userId, address string) error
+	DeleteAddress(chain, userId string) error
 	ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error)
 }
 
@@ -563,8 +577,13 @@ func (r *walletContactsRefresher) refresh(
 			if r.skipped(peerId) {
 				return
 			}
-			address, ok := fetchWalletAddress(chain, peerId, ownNode, users, streamer)
-			if !ok {
+			address, state := fetchWalletAddress(chain, peerId, ownNode, users, streamer)
+			if state == peerWalletOff {
+				if err := wallets.DeleteAddress(chain, peerId); err != nil {
+					log.Warnf("wallet: contacts: forgetting the address of %s failed: %v", peerId, err)
+				}
+			}
+			if state != peerWalletOn {
 				r.hold(peerId)
 				return
 			}
@@ -576,31 +595,80 @@ func (r *walletContactsRefresher) refresh(
 	wg.Wait()
 }
 
+type peerWallet int
+
+const (
+	peerWalletUnknown peerWallet = iota
+	peerWalletOn
+	peerWalletOff
+)
+
 func fetchWalletAddress(
 	chain, peerId string,
 	ownNode warpnet.NodeInfo,
 	users WalletUserFetcher,
 	streamer WalletStreamer,
-) (string, bool) {
+) (string, peerWallet) {
 	user, err := users.Get(peerId)
 	if err != nil || user.NodeId == "" || user.NodeId == ownNode.ID.String() {
-		return "", false
+		return "", peerWalletUnknown
 	}
+	return askWalletAddress(chain, user, streamer)
+}
+
+func askWalletAddress(chain string, user domain.User, streamer WalletStreamer) (string, peerWallet) {
 	resp, err := streamer.GenericStream(user.NodeId, event.PUBLIC_GET_WALLET_ADDRESS, event.WalletAddressEvent{Chain: chain})
 	if err != nil {
 		if !errors.Is(err, warpnet.ErrNodeIsOffline) {
-			log.Warnf("wallet: contacts: asking %s for an address: %v", peerId, err)
+			log.Warnf("wallet: asking %s for an address: %v", user.Id, err)
 		}
-		return "", false
+		return "", peerWalletUnknown
+	}
+	var refusal event.ResponseError
+	if _ = json.Unmarshal(resp, &refusal); refusal.Message == ErrPeerWalletOff.Error() {
+		return "", peerWalletOff
 	}
 	var out event.WalletAddressResponse
 	if err := json.Unmarshal(resp, &out); err != nil {
-		return "", false
+		return "", peerWalletUnknown
 	}
 	if out.Address == "" || out.Chain != chain {
-		return "", false
+		return "", peerWalletUnknown
 	}
-	return out.Address, true
+	return out.Address, peerWalletOn
+}
+
+func checkRecipientWallet(
+	chain, to string,
+	owner domain.Owner,
+	wallets WalletAddressStorer,
+	users WalletUserFetcher,
+	streamer WalletStreamer,
+) error {
+	known, _, err := wallets.ListAddresses(chain, nil, nil)
+	if err != nil {
+		return err
+	}
+	for _, item := range known {
+		if item.Address != to || item.UserId == owner.UserId {
+			continue
+		}
+		user, err := users.Get(item.UserId)
+		if err != nil || user.NodeId == "" {
+			return ErrRecipientUnknown
+		}
+		address, state := askWalletAddress(chain, user, streamer)
+		if state == peerWalletOff {
+			if err := wallets.DeleteAddress(chain, item.UserId); err != nil {
+				log.Warnf("wallet: forgetting the address of %s failed: %v", item.UserId, err)
+			}
+			return ErrRecipientWalletOff
+		}
+		if state != peerWalletOn || address != to {
+			return ErrRecipientUnknown
+		}
+	}
+	return nil
 }
 
 func walletAsset(asset string, backend WalletBackend) (string, error) {

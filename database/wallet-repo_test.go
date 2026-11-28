@@ -89,6 +89,20 @@ func (s *WalletRepoTestSuite) TestSetGetList() {
 	s.Equal("SoLaNa", solana[0].Address)
 }
 
+func (s *WalletRepoTestSuite) TestDeleteAddress() {
+	repo := NewWalletRepo(s.db)
+	user := uuid.New().String()
+	s.Require().NoError(repo.SetAddress("tron-testnet", user, "TAddr"))
+
+	s.Require().NoError(repo.DeleteAddress("tron-testnet", user))
+	_, err := repo.GetAddress("tron-testnet", user)
+	s.ErrorIs(err, ErrWalletAddressNotFound)
+
+	s.NoError(repo.DeleteAddress("tron-testnet", user), "forgetting an address twice is not an error")
+	s.Error(repo.DeleteAddress("", user))
+	s.Error(repo.DeleteAddress("tron-testnet", ""))
+}
+
 func (s *WalletRepoTestSuite) TestValidation() {
 	repo := NewWalletRepo(s.db)
 	s.Error(repo.SetAddress("", "user", "TAddr"))

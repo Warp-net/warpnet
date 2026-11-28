@@ -877,7 +877,7 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 		},
 		{
 			event.PRIVATE_POST_WALLET_SEND,
-			on(handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient)),
+			on(handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient, m.walletRepo, m.userRepo, m)),
 		},
 		{
 			event.PRIVATE_POST_WALLET_STAKE,

@@ -137,6 +137,88 @@ func TestWalletOn(t *testing.T) {
 	})
 }
 
+func sendHandler(backend stubWalletBackend) warpnet.WarpHandlerFunc {
+	return StreamWalletSendHandler(ownerAuth(), walletKey(), backend, newStubWalletAddresses(), stubWalletUsers{}, &stubWalletPeerStreamer{})
+}
+
+func TestWalletSendChecksAWarpnetRecipient(t *testing.T) {
+	sent := 0
+	backend := stubWalletBackend{transferFn: func(seed, asset, to, amount string) (string, error) {
+		sent++
+		return "tx-1", nil
+	}}
+	offReply, _ := json.Marshal(event.ResponseError{Code: 500, Message: ErrPeerWalletOff.Error()})
+	onReply, _ := json.Marshal(event.WalletAddressResponse{Address: "TPeerAddress", Chain: "testnet", UserId: "peer-1"})
+	users := stubWalletUsers{users: map[string]domain.User{"peer-1": {Id: "peer-1", NodeId: "peer-node-1"}}}
+	send := func(store *stubWalletAddresses, streamer *stubWalletPeerStreamer, to string) error {
+		_, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend, store, users, streamer)(
+			marshalWallet(t, event.WalletSendEvent{To: to, Amount: "1000000"}), nil)
+		return err
+	}
+	known := func() *stubWalletAddresses {
+		store := newStubWalletAddresses()
+		_ = store.SetAddress("testnet", "peer-1", "TPeerAddress")
+		return store
+	}
+
+	t.Run("refuses a recipient whose wallet is off and forgets the address", func(t *testing.T) {
+		sent = 0
+		store := known()
+		err := send(store, &stubWalletPeerStreamer{responses: map[string][]byte{"peer-node-1": offReply}}, "TPeerAddress")
+		if !errors.Is(err, ErrRecipientWalletOff) || sent != 0 {
+			t.Fatalf("err = %v, transfers = %d", err, sent)
+		}
+		if stored, _, _ := store.ListAddresses("testnet", nil, nil); len(stored) != 0 {
+			t.Fatalf("the off wallet's address must be forgotten, still have %+v", stored)
+		}
+	})
+
+	t.Run("refuses when the recipient's node cannot confirm", func(t *testing.T) {
+		sent = 0
+		err := send(known(), &stubWalletPeerStreamer{errs: map[string]error{"peer-node-1": warpnet.ErrNodeIsOffline}}, "TPeerAddress")
+		if !errors.Is(err, ErrRecipientUnknown) || sent != 0 {
+			t.Fatalf("err = %v, transfers = %d", err, sent)
+		}
+	})
+
+	t.Run("sends once the recipient's node confirms the same address", func(t *testing.T) {
+		sent = 0
+		streamer := &stubWalletPeerStreamer{responses: map[string][]byte{"peer-node-1": onReply}}
+		if err := send(known(), streamer, "TPeerAddress"); err != nil || sent != 1 {
+			t.Fatalf("err = %v, transfers = %d", err, sent)
+		}
+		if len(streamer.asked) != 1 {
+			t.Fatalf("the recipient's node must be asked once, asked %v", streamer.asked)
+		}
+	})
+
+	t.Run("sends to an address no Warpnet user published without asking anyone", func(t *testing.T) {
+		sent = 0
+		streamer := &stubWalletPeerStreamer{}
+		if err := send(known(), streamer, "TExternalAddress"); err != nil || sent != 1 || len(streamer.asked) != 0 {
+			t.Fatalf("err = %v, transfers = %d, asked %v", err, sent, streamer.asked)
+		}
+	})
+}
+
+func TestGetWalletContactsDropsAWalletTurnedOff(t *testing.T) {
+	offReply, _ := json.Marshal(event.ResponseError{Code: 500, Message: ErrPeerWalletOff.Error()})
+	store := newStubWalletAddresses()
+	_ = store.SetAddress("testnet", "peer-1", "TPeerAddress")
+	out, err := StreamGetWalletContactsHandler(
+		ownerAuth(), walletKey(), walletContactsBackend(), store,
+		stubWalletFollows{followings: []string{"peer-1"}},
+		stubWalletUsers{users: map[string]domain.User{"peer-1": {Id: "peer-1", NodeId: "peer-node-1"}}},
+		&stubWalletPeerStreamer{responses: map[string][]byte{"peer-node-1": offReply}},
+	)([]byte(`{}`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contacts := out.(event.WalletContactsResponse).Contacts; len(contacts) != 0 {
+		t.Fatalf("contacts = %+v, want the peer with the wallet off gone", contacts)
+	}
+}
+
 func TestGetWalletHandler(t *testing.T) {
 	backend := stubWalletBackend{
 		addressFn: func(seed string) (string, error) {
@@ -254,7 +336,7 @@ func TestWalletSendHandler(t *testing.T) {
 		},
 	}
 	body := marshalWallet(t, event.WalletSendEvent{To: "TGf63ryqEJdybz5S23U2sBcFbW8uAsWSPS", Amount: "1000000"})
-	out, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(body, nil)
+	out, err := sendHandler(backend)(body, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,11 +401,11 @@ func TestWalletSendHandlerValidation(t *testing.T) {
 		{To: "TGf63ryqEJdybz5S23U2sBcFbW8uAsWSPS", Amount: ""},
 	}
 	for _, c := range cases {
-		if _, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(marshalWallet(t, c), nil); err == nil {
+		if _, err := sendHandler(backend)(marshalWallet(t, c), nil); err == nil {
 			t.Fatalf("expected error for %+v", c)
 		}
 	}
-	if _, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)([]byte("not json"), nil); err == nil {
+	if _, err := sendHandler(backend)([]byte("not json"), nil); err == nil {
 		t.Fatal("expected error on bad payload")
 	}
 }
@@ -352,7 +434,7 @@ func TestWalletSendHandlerPicksTheAsset(t *testing.T) {
 			body := marshalWallet(t, event.WalletSendEvent{
 				To: "TGf63ryqEJdybz5S23U2sBcFbW8uAsWSPS", Amount: "1000000", Asset: c.asset,
 			})
-			out, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(body, nil)
+			out, err := sendHandler(backend)(body, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -374,7 +456,7 @@ func TestWalletSendHandlerRejectsAnUnknownAsset(t *testing.T) {
 	body := marshalWallet(t, event.WalletSendEvent{
 		To: "TGf63ryqEJdybz5S23U2sBcFbW8uAsWSPS", Amount: "1", Asset: "DOGE",
 	})
-	if _, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(body, nil); err == nil {
+	if _, err := sendHandler(backend)(body, nil); err == nil {
 		t.Fatal("expected an error for an asset the wallet does not hold")
 	}
 }
@@ -455,6 +537,13 @@ func (s *stubWalletAddresses) SetAddress(chain, userId, address string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stored[chain+"/"+userId] = domain.WalletAddress{Address: address, Chain: chain, UserId: userId}
+	return nil
+}
+
+func (s *stubWalletAddresses) DeleteAddress(chain, userId string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.stored, chain+"/"+userId)
 	return nil
 }
 
@@ -542,7 +631,7 @@ func TestWalletSendNamesTheTransactionOfAnUnansweredTransfer(t *testing.T) {
 		return "tx-maybe", errors.New("payments: unavailable: no answer to the broadcast")
 	}}
 	body := marshalWallet(t, event.WalletSendEvent{To: "TRecipient", Amount: "5", Asset: "TRX"})
-	_, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(body, nil)
+	_, err := sendHandler(backend)(body, nil)
 	if err == nil || !strings.Contains(err.Error(), "tx-maybe") || !strings.Contains(err.Error(), "check the history") {
 		t.Fatalf("err = %v: the owner must not be invited to send the same money twice", err)
 	}

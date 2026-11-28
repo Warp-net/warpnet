@@ -92,6 +92,24 @@ func (repo *WalletRepo) GetAddress(chain, userId string) (domain.WalletAddress, 
 	return stored, nil
 }
 
+func (repo *WalletRepo) DeleteAddress(chain, userId string) error {
+	if chain == "" {
+		return local_store.DBError("empty chain")
+	}
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Delete(walletAddressKey(chain, userId)); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
 func (repo *WalletRepo) ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error) {
 	if chain == "" {
 		return nil, "", local_store.DBError("empty chain")

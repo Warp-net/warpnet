@@ -133,6 +133,7 @@ type WalletProvider interface {
 // its peers published.
 type WalletAddressProvider interface {
 	SetAddress(chain, userId, address string) error
+	DeleteAddress(chain, userId string) error
 	ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error)
 }
 
