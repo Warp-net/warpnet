@@ -89,18 +89,24 @@ func (s *WalletRepoTestSuite) TestSetGetList() {
 	s.Equal("SoLaNa", solana[0].Address)
 }
 
-func (s *WalletRepoTestSuite) TestDeleteAddress() {
+func (s *WalletRepoTestSuite) TestSetWalletOff() {
 	repo := NewWalletRepo(s.db)
 	user := uuid.New().String()
 	s.Require().NoError(repo.SetAddress("tron-testnet", user, "TAddr"))
 
-	s.Require().NoError(repo.DeleteAddress("tron-testnet", user))
-	_, err := repo.GetAddress("tron-testnet", user)
-	s.ErrorIs(err, ErrWalletAddressNotFound)
+	s.Require().NoError(repo.SetWalletOff("tron-testnet", user))
+	stored, err := repo.GetAddress("tron-testnet", user)
+	s.Require().NoError(err)
+	s.True(stored.Off)
+	s.Equal("TAddr", stored.Address, "the address stays known so a pasted copy is still recognised")
 
-	s.NoError(repo.DeleteAddress("tron-testnet", user), "forgetting an address twice is not an error")
-	s.Error(repo.DeleteAddress("", user))
-	s.Error(repo.DeleteAddress("tron-testnet", ""))
+	s.Require().NoError(repo.SetAddress("tron-testnet", user, "TAddr"))
+	stored, err = repo.GetAddress("tron-testnet", user)
+	s.Require().NoError(err)
+	s.False(stored.Off, "an address published again means the wallet is on")
+
+	s.NoError(repo.SetWalletOff("tron-testnet", uuid.New().String()), "an unknown user has nothing to mark")
+	s.Error(repo.SetWalletOff("", user))
 }
 
 func (s *WalletRepoTestSuite) TestValidation() {

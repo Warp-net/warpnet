@@ -333,7 +333,7 @@ const (
 
 type WalletAddressStorer interface {
 	SetAddress(chain, userId, address string) error
-	DeleteAddress(chain, userId string) error
+	SetWalletOff(chain, userId string) error
 	ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error)
 }
 
@@ -469,7 +469,7 @@ func StreamGetWalletContactsHandler(
 		}
 		contacts := make([]event.WalletContact, 0, len(stored))
 		for _, item := range stored {
-			if item.UserId == owner.UserId || item.Address == "" {
+			if item.UserId == owner.UserId || item.Address == "" || item.Off {
 				continue
 			}
 			contact := event.WalletContact{Address: item.Address, UserId: item.UserId}
@@ -579,8 +579,8 @@ func (r *walletContactsRefresher) refresh(
 			}
 			address, state := fetchWalletAddress(chain, peerId, ownNode, users, streamer)
 			if state == peerWalletOff {
-				if err := wallets.DeleteAddress(chain, peerId); err != nil {
-					log.Warnf("wallet: contacts: forgetting the address of %s failed: %v", peerId, err)
+				if err := wallets.SetWalletOff(chain, peerId); err != nil {
+					log.Warnf("wallet: contacts: marking the wallet of %s off failed: %v", peerId, err)
 				}
 			}
 			if state != peerWalletOn {
@@ -659,8 +659,8 @@ func checkRecipientWallet(
 		}
 		address, state := askWalletAddress(chain, user, streamer)
 		if state == peerWalletOff {
-			if err := wallets.DeleteAddress(chain, item.UserId); err != nil {
-				log.Warnf("wallet: forgetting the address of %s failed: %v", item.UserId, err)
+			if err := wallets.SetWalletOff(chain, item.UserId); err != nil {
+				log.Warnf("wallet: marking the wallet of %s off failed: %v", item.UserId, err)
 			}
 			return ErrRecipientWalletOff
 		}

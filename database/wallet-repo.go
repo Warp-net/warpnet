@@ -4,6 +4,7 @@
 package database
 
 import (
+	"errors"
 	"time"
 
 	local_store "github.com/Warp-net/warpnet/database/local-store"
@@ -92,19 +93,26 @@ func (repo *WalletRepo) GetAddress(chain, userId string) (domain.WalletAddress, 
 	return stored, nil
 }
 
-func (repo *WalletRepo) DeleteAddress(chain, userId string) error {
-	if chain == "" {
-		return local_store.DBError("empty chain")
+func (repo *WalletRepo) SetWalletOff(chain, userId string) error {
+	stored, err := repo.GetAddress(chain, userId)
+	if errors.Is(err, ErrWalletAddressNotFound) {
+		return nil
 	}
-	if userId == "" {
-		return local_store.DBError("empty user id")
+	if err != nil {
+		return err
+	}
+	stored.Off = true
+	stored.UpdatedAt = time.Now()
+	value, err := json.Marshal(stored)
+	if err != nil {
+		return err
 	}
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
 	}
 	defer txn.Rollback()
-	if err := txn.Delete(walletAddressKey(chain, userId)); err != nil {
+	if err := txn.Set(walletAddressKey(chain, userId), value); err != nil {
 		return err
 	}
 	return txn.Commit()

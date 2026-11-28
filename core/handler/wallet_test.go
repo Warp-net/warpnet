@@ -161,15 +161,28 @@ func TestWalletSendChecksAWarpnetRecipient(t *testing.T) {
 		return store
 	}
 
-	t.Run("refuses a recipient whose wallet is off and forgets the address", func(t *testing.T) {
+	t.Run("refuses a recipient whose wallet is off, now and when the address is pasted again", func(t *testing.T) {
 		sent = 0
 		store := known()
-		err := send(store, &stubWalletPeerStreamer{responses: map[string][]byte{"peer-node-1": offReply}}, "TPeerAddress")
-		if !errors.Is(err, ErrRecipientWalletOff) || sent != 0 {
-			t.Fatalf("err = %v, transfers = %d", err, sent)
+		streamer := &stubWalletPeerStreamer{responses: map[string][]byte{"peer-node-1": offReply}}
+		for range 2 {
+			err := send(store, streamer, "TPeerAddress")
+			if !errors.Is(err, ErrRecipientWalletOff) || sent != 0 {
+				t.Fatalf("err = %v, transfers = %d", err, sent)
+			}
 		}
-		if stored, _, _ := store.ListAddresses("testnet", nil, nil); len(stored) != 0 {
-			t.Fatalf("the off wallet's address must be forgotten, still have %+v", stored)
+		stored, _, _ := store.ListAddresses("testnet", nil, nil)
+		if len(stored) != 1 || !stored[0].Off {
+			t.Fatalf("the address must stay known and be marked off, have %+v", stored)
+		}
+	})
+
+	t.Run("sends again once the recipient turns the wallet back on", func(t *testing.T) {
+		sent = 0
+		store := known()
+		_ = store.SetWalletOff("testnet", "peer-1")
+		if err := send(store, &stubWalletPeerStreamer{responses: map[string][]byte{"peer-node-1": onReply}}, "TPeerAddress"); err != nil || sent != 1 {
+			t.Fatalf("err = %v, transfers = %d", err, sent)
 		}
 	})
 
@@ -540,10 +553,13 @@ func (s *stubWalletAddresses) SetAddress(chain, userId, address string) error {
 	return nil
 }
 
-func (s *stubWalletAddresses) DeleteAddress(chain, userId string) error {
+func (s *stubWalletAddresses) SetWalletOff(chain, userId string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.stored, chain+"/"+userId)
+	if item, ok := s.stored[chain+"/"+userId]; ok {
+		item.Off = true
+		s.stored[chain+"/"+userId] = item
+	}
 	return nil
 }
 

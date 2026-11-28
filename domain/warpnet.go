@@ -534,4 +534,5 @@ type WalletAddress struct {
 	Chain     string    `json:"chain"`
 	UpdatedAt time.Time `json:"updated_at"`
 	UserId    string    `json:"user_id"`
+	Off       bool      `json:"off,omitempty"`
 }
